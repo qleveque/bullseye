@@ -45,8 +45,12 @@ class Bullseye_graph:
                 "compute_prior_kernel"      : False,
                 "s"                         : 10,
                 "quadrature_deg"            : 12,
+                "sparse"                    : True,
                 "chunk_as_sum"              : True,
-                "sparse"                    : True
+                "keep_1d_prior"             : True,
+                "number_of_chunk_max"       : 0,
+                "natural_param_prior"       : False,
+                "natural_param_likelihood"  : False
                 }        
         self.option_list = list(options)
         
@@ -109,20 +113,17 @@ class Bullseye_graph:
             self.k = k
             
         self.p = self.d * self.k
-        
-        if prior_std == None:
-            self.prior_std = 1
-        """ TODO to see again
+       
+        if prior_std is None:
             self.prior_std = np.eye(self.p)
-        elif type(prior_std) in [float, int]:
-            self.prior_std = prior_std * np_eye(self.p)
-        elif len(prior_std.shape) == 1:
-            assert list(prior_std.shape) == [self.p]
+        elif type(prior_std) == int:
+            self.prior_std = prior_std * np.eye(self.p)
+        elif len(list(prior_std.shape)) == 1:
+            assert list(prior_std.shape)==[self.p]
             self.prior_std = np.diag(prior_std)
         else:
-            assert list(prior_std) == [self.p,self.p]
+            assert list(prior_std.shape) == [self.p, self.p]
             self.prior_std = prior_std
-        """
         
         self.feed_with_is_called = True
             
@@ -166,13 +167,18 @@ class Bullseye_graph:
                 raise ValueError('Unknown parameter given for set_options().\nSpecifically "{}".'.format(key))
             else:
                 setattr(self, key, kwargs[key])
+                
+        #TODO : compute_prior_kernel useless when using keep_1d_prior
+        #WARNING
+        if self.keep_1d_prior:
+            self.compute_prior_kernel = False
     
     def build(self):
         assert self.feed_with_is_called and self.set_model_is_called and self.init_with_is_called
         
         self.graph, self.in_graph = construct_bullseye_graph(self)
         self.build_is_called = True
-        
+    
     def run(self, n_iter = 10, show_elapsed_time = True, dict = {}):
         assert self.build_is_called
         
@@ -191,67 +197,20 @@ class Bullseye_graph:
                 start_time = time.time()
             
             for epoch in range(n_iter):
-                new_elbo  = sess.run(ops["new_ELBO"], feed_dict = dict)
-                if new_elbo<=elbo:
-                    sess.run(ops["decrease_step_size"], feed_dict = dict)
-                    print("not accepted : {}".format(new_elbo))
+                if self.file is None:
+                    new_elbo  = sess.run(ops["new_ELBO"], feed_dict = dict)
+                    d_computed = {}
                 else:
-                    sess.run(ops["update_ops"], feed_dict = dict)
-                    elbo = new_elbo
-                    print("accepted : {}".format(elbo))
-                    
-                mu, cov = sess.run([ops["mu"], ops["cov"]])                
-                
-                mus.append(mu)
-                covs.append(cov)
-                elbos.append(elbo)
-            
-            if show_elapsed_time:
-                elapsed_time = time.time()-start_time
-                print('\nit took {} s'.format(elapsed_time))
-                
-            return {"mus" : mus, "covs" : covs, "elbos" : elbos}
-                
-    def run_test(self, n_iter = 10, show_elapsed_time = True, dict = {}):
-        assert self.build_is_called
-        
-        ops = self.in_graph
-        mus = []
-        covs = []
-        elbos = []
-        elbo = -np.inf
-        
-        with tf.Session(graph = self.graph) as sess:
-            #INIT
-            sess.run(ops["init"])
-            
-            #START
-            if show_elapsed_time:
-                start_time = time.time()
-            
-            for epoch in range(n_iter):
-                sess.run(ops["init_globals"])
-                reader = pd.read_table(self.file, sep = ",", chunksize = self.chunksize)
-                
-                i = 0
-                for chunk in reader:
-                    data = np.asarray(chunk)
-                    X = data[:,1:]
-                    Y = to_one_hot(data[:,0])
-                    d_ = {"X:0" : X, "Y:0" : Y}
-                    a = sess.run(ops["computed_e"], feed_dict = d_)
-                    print(a)
-                    sess.run(ops["update_globals"], feed_dict = d_)
-                    i+=1
-                    if i>=3:
-                        break
-                        
-                new_elbo  = sess.run(ops["new_ELBO"])
+                    sess.run(ops["init_globals"])
+                    reader = pd.read_table(self.file, sep = ",", chunksize = self.chunksize)
+                    d_computed = self.read_chunks(reader,sess)
+                                  
+                new_elbo  = sess.run(ops["new_ELBO"], feed_dict = d_computed)
                 if new_elbo<=elbo:
                     sess.run(ops["decrease_step_size"])
                     print("not accepted : {}".format(new_elbo))
                 else:
-                    sess.run(ops["update_ops"])
+                    sess.run(ops["update_ops"], feed_dict = d_computed)
                     elbo = new_elbo
                     print("accepted : {}".format(elbo))
                     
@@ -266,3 +225,41 @@ class Bullseye_graph:
                 print('\nit took {} s'.format(elapsed_time))
                 
             return {"mus" : mus, "covs" : covs, "elbos" : elbos}
+            
+    def read_chunks(self, reader, sess):
+        ops = self.in_graph
+    
+        if not self.chunk_as_sum:
+            computed_e_ = np.empty((0,1),np.float32)
+            computed_rho_ = np.empty((0,self.p),np.float32)
+            computed_beta_ = np.empty((0,self.p,self.p),np.float32)
+        
+        i = 0
+        for chunk in reader:
+            data = np.asarray(chunk)
+            X = data[:,1:]/253.
+            Y = to_one_hot(data[:,0])
+            d_ = {"X:0" : X, "Y:0" : Y}
+            if self.chunk_as_sum:
+                sess.run(ops["update_globals"], feed_dict = d_)
+            else: #chunk as list
+                to_compute = ["computed_e","computed_rho","computed_beta",
+                    "computed_e_prior","computed_rho_prior","computed_beta_prior"]
+                ce, cr, cb, cep, crp, cbp =\
+                    sess.run([ops[op] for op in to_compute], feed_dict = d_)
+                
+                computed_e_ = np.vstack((computed_e_,(ce + cep)))
+                computed_rho_ = np.vstack((computed_rho_,(cr + crp)))
+                computed_beta_ = np.vstack((computed_beta_,np.expand_dims((cb + cbp),0)))
+            print("chunk done")
+            if self.number_of_chunk_max != 0:
+                i+=1
+                if i>=self.number_of_chunk_max:
+                    break
+                    
+        d_computed = {}
+        if not self.chunk_as_sum:
+            d_computed = {"global_e:0": np.sum(computed_e_, axis = 0),
+                        "global_rho:0": np.sum(computed_rho_, axis = 0),
+                        "global_beta:0": np.sum(computed_beta_, axis = 0)}
+        return d_computed
