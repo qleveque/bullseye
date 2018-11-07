@@ -11,13 +11,13 @@ These instructions will get you a copy of the project up and running on your loc
 Bullseye! is now available as a [PyPI package](https://pypi.python.org/pypi/bullseye_method/):
 
 ```
-    pip install bullseye_method
+pip install bullseye_method
 ```
 
 or clone the repository (no installation required, dependencies will be installed automatically):
 
 ```
-    git clone https://github.com/Whenti/bullseye
+git clone https://github.com/Whenti/bullseye
 ```
 
 or [download and extract the zip](https://github.com/Whenti/bullseye/archive/master.zip) into your project folder.
