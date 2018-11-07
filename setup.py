@@ -17,7 +17,9 @@ setuptools.setup(
     install_requires = [
     "numpy>=1.15",
     "pandas>=0.23",
-    "tensorflow>=1.10"
+    "tensorflow>=1.10",
+    "seaborn>=0.9.0",
+    "matplotlib>=2.2.3"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
