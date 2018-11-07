@@ -20,7 +20,7 @@ or clone the repository (no installation required, dependencies will be installe
     git clone https://github.com/Whenti/bullseye
 ```
 
-or [download and extract the zip] (https://github.com/Whenti/bullseye/archive/master.zip) into your project folder.
+or [download and extract the zip](https://github.com/Whenti/bullseye/archive/master.zip) into your project folder.
 
 ## Running the tests
 
@@ -31,7 +31,7 @@ from Bullseye.Tests import simple_test
 simple_test()
 ```
 
-##Example
+## Example
 
 ```py
 import Bullseye
