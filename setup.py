@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="bullseye_method",
-    version="0.0.1",
+    version="0.0.2",
     author="Quentin Lévêque, Guillaume Dehaene",
     author_email="qleveque@hotmail.com, guillaume.dehaene@gmail.com",
     description=\
@@ -15,9 +15,9 @@ setuptools.setup(
     url="https://github.com/Whenti/bullseye",
     packages=setuptools.find_packages(),
     install_requires = [
-    "numpy",
-    "pandas",
-    "tensorflow"
+    "numpy>=1.15",
+    "pandas>=0.23",
+    "tensorflow>=1.10"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
