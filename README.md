@@ -55,7 +55,7 @@ bull.run()
 * **Quentin Lévêque** [Whenti](https://github.com/Whenti)
 * **Guillaume Dehaene**
 
-See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project. Hopefully, there will be more.
+See also the list of [contributors](https://github.com/Whenti/bullseye/contributors) who participated in this project. Hopefully, there will be more.
 
 ## License
 
