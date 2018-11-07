@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="bullseye_method",
-    version="0.0.2",
+    version="0.0.3",
     author="Quentin Lévêque, Guillaume Dehaene",
     author_email="qleveque@hotmail.com, guillaume.dehaene@gmail.com",
     description=\
