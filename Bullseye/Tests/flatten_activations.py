@@ -49,6 +49,7 @@ def flatten_activations(recompute = False):
     if os.path.isfile(result_filename):
         df = pd.read_csv(result_filename)
         sns.boxplot(x="method", y="times",data=df)
+        plt.title('Study of the interest of flattening activations')
         plt.show()
     else:
         raise FileNotFoundError

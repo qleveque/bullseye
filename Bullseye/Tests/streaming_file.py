@@ -51,6 +51,7 @@ def streaming_file(recompute = False):
     if os.path.isfile(result_filename):
         df = pd.read_csv(result_filename)
         sns.boxplot(x="method", y="times",data=df)
+        plt.title('Study of the efficiency of file streaming')
         plt.show()
     else:
         raise FileNotFoundError

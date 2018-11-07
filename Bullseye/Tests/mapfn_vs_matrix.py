@@ -57,6 +57,7 @@ def mapfn_vs_matrix(recompute = False):
     if os.path.isfile(result_filename):
         df = pd.read_csv(result_filename)
         sns.boxplot(x="method", y="times",data=df)
+        plt.title('Comparison of different calculation approaches')
         plt.show()
     else:
         raise FileNotFoundError
