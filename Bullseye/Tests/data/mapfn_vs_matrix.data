@@ -1,0 +1,25 @@
+,method,times,status
+0,mtrx,0.6552000045776367,accepted
+1,mtrx,0.09360003471374512,accepted
+0,mtrx,0.6083998680114746,accepted
+1,mtrx,0.09359979629516602,accepted
+0,mapfn,3.0420000553131104,accepted
+1,mapfn,2.4335999488830566,accepted
+0,mapfn,3.1043999195098877,accepted
+1,mapfn,2.26200008392334,accepted
+0,opt. mapfn,2.4648001194000244,accepted
+1,opt. mapfn,2.0279998779296875,accepted
+0,opt. mapfn,2.6364002227783203,accepted
+1,opt. mapfn,1.9656000137329102,accepted
+0,"mtrx, proj. matrx",0.5459997653961182,accepted
+1,"mtrx, proj. matrx",0.031200170516967773,accepted
+0,"mtrx, proj. matrx",0.5460002422332764,accepted
+1,"mtrx, proj. matrx",0.046799659729003906,accepted
+0,autograd mtrx,0.8580002784729004,accepted
+1,autograd mtrx,0.12479996681213379,accepted
+0,autograd mtrx,0.8111999034881592,accepted
+1,autograd mtrx,0.09360003471374512,accepted
+0,"autograd mtrx, proj. matrx",0.6552000045776367,accepted
+1,"autograd mtrx, proj. matrx",0.062400102615356445,accepted
+0,"autograd mtrx, proj. matrx",0.670799970626831,accepted
+1,"autograd mtrx, proj. matrx",0.07800006866455078,accepted

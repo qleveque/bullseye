@@ -8,5 +8,8 @@ def warn_useless_parameter(param1,param2,function):
     msg = """Useless parameter in function {function}.
     Specifically, {param1} is ignored because {param2} is specified"""
     warn(msg.format(param1=param1,param2=param2,function=function))
-
+def warn_deprecated():
+    warn("deprecated", DeprecationWarning)
     
+def err_not_implemented():
+    raise NotImplementedError

@@ -17,6 +17,8 @@
 """
 import numpy as np
 import tensorflow as tf
+
+from .warning_handler import *
  
 def Softmax_probabilities(A):
     """
@@ -152,6 +154,7 @@ def Phi_multilogit_aut_grad(A,Y):
 def grad_Phi_multilogit_aut_grad(A,Y):
     return tf.gradients(Phi_multilogit(A,Y),A)[0]
 def hess_Phi_multilogit_aut_grad(A,Y):
+    k = Y.get_shape().as_list()[-1]
     P=Softmax_probabilities(A)
     return tf.einsum('nk,kj->nkj',P,tf.eye(k)) - tf.einsum('ni,nj->nij',P,P)
     
@@ -201,9 +204,10 @@ def hess_Phi_multilogit_mapfn_aut_diff(A,Y):
     .. seealso:: Projection (matrix form)
 """
 def proj_multilogit(x, d, k):
-    #DEPRECATED
-    #return tf.transpose(tf.convert_to_tensor((np.eye(k),tf.reshape(x,(1,d)))))
-    pass
+    #TODO
+    x_tiled = tf.tile(x,[k])
+    kp = tf.convert_to_tensor(np.kron(np.eye(k),np.ones((d,1))), tf.float32)
+    return tf.einsum('i,ij->ij', x_tiled, kp)
 
 """
     Projection (matrix form)
@@ -223,7 +227,7 @@ def proj_multilogit(x, d, k):
 """
 
 def Proj_multilogit(X,d,k):
-    #KP = tf.linalg.LinearOperatorKronecker(eye, ones)
+    #TODO
     X_tiled = tf.tile(X, [1,k])
     KP = tf.convert_to_tensor(np.kron(np.eye(k),np.ones((d,1))), tf.float32)
     return tf.einsum('np,pk->npk',X_tiled,KP)

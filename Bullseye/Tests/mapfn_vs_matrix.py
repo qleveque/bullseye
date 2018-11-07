@@ -1,9 +1,16 @@
-import Bullseye
 import time
+import os
 import pandas as pd
-from Bullseye import generate_multilogit
 
-result_filename = "mapfn_vs_matrix.data"
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+import Bullseye
+from Bullseye import generate_multilogit
+from Bullseye.visual import *
+
+cwd = os.path.dirname(os.path.realpath(__file__))
+result_filename = os.path.join(cwd,"data","mapfn_vs_matrix.data")
 
 class Option:
     def __init__(self, name, phi_option, proj_option):
@@ -15,16 +22,20 @@ class Option:
 def mapfn_vs_matrix():
     theta_0, x_array, y_array = generate_multilogit(d = 10, n = 10**3, k = 5)
     
-    options = [Option("Matrix","","mapfn"),
-                Option("map_fn", "mapfn","mapfn"),
-                Option("Optimized map_fn", "mapfn_opt","mapfn"),
-                Option("Matrix with matrix computation of A's", "",""),
-                Option("Matrix with auto gradient", "", "mapfn")]
+    df = pd.DataFrame(columns=["method","times","status"])
     
-    n_iter = 5
-    num_of_loops = 5
+    options = [Option("mtrx","","mapfn"),
+                Option("mapfn", "mapfn","mapfn"),
+                Option("opt. mapfn", "mapfn_opt","mapfn"),
+                Option("mtrx, proj. matrx", "",""),
+                Option("autograd mtrx", "aut_grad", "mapfn"),
+                Option("autograd mtrx, proj. matrx", "aut_grad", "")]
+    
+    n_iter = 2
+    num_of_loops = 2
     
     for option in options:
+        print_title(option.name)
         bull = Bullseye.Graph()
         bull.feed_with(x_array,y_array)
         bull.set_model("multilogit",
@@ -33,17 +44,21 @@ def mapfn_vs_matrix():
         bull.init_with(mu_0 = 0, cov_0 = 1)
         bull.build()
         
-        for _ in num_of_loops:
+        for _ in range(num_of_loops):
+            print_subtitle('run n°{}'.format(_))
             d = bull.run(n_iter)
-            option.times += d["times"]
+            df_ = pd.DataFrame({'method' : n_iter*[option.name], 'times' : d["times"], 'status': d["status"]})
+            df = df.append(df_)
     
     dict_times = {}
     for option in options:
         dict_times[option.name]=option.times
+        
     
     with open(result_filename, "w", encoding = 'utf-8') as f:
-        df = pd.DataFrame(dict_times)
         df.to_csv(result_filename)
         
 def plot_mapfn_vs_matrix():
-    pass
+    df = pd.read_csv(result_filename)
+    sns.boxplot(x="method", y="times",data=df)
+    plt.show()

@@ -317,7 +317,7 @@ class Graph:
         #remember this method is called, to prevent errors
         self.build_is_called = True
     
-    def run(self, n_iter = 10, X = None, Y = None):
+    def run(self, n_iter = 10, X = None, Y = None, keep_track=False):
         """
         run the implicit tensorflow graph.
         
@@ -327,6 +327,8 @@ class Graph:
         :type X: np.array [None, d]
         :param Y: allow the end user to specify a X if it hasn't been yet
         :type Y: np.array [None, k]
+        :param keep_track: keep track of all mus,covs,elbos and so on
+        :type keep_track: boolean
         
         :return: μ's, Σ's, ELBOs, and times of each iteration
         :rtype: dict
@@ -339,6 +341,7 @@ class Graph:
         covs = []
         elbos = []
         times = []
+        status = []
         elbo = -np.inf
         
         #easy access to the tensorflow graph operations
@@ -381,27 +384,36 @@ class Graph:
                 if new_elbo<=elbo:
                     #decrease step size
                     sess.run(ops["decrease_step_size"])
-                    print("not accepted : {}".format(new_elbo))
+                    status.append("not accepted")
                     
                 #if ELBO is better
                 else:
                     #update Σ,μ
                     sess.run(ops["update_ops"], feed_dict = d_computed)
                     elbo = new_elbo
-                    print("accepted : {}".format(elbo))
+                    status.append("accepted")
+                    
+                #print status
+                print("{stat} : {elbo}".format(elbo=new_elbo,stat=status[-1]))
                 
                 #save the current state
                 mu, cov = sess.run([ops["mu"], ops["cov"]])
-                mus.append(mu)
-                covs.append(cov)
-                elbos.append(elbo)
-                times.append(time.time()-start_time)
+                if not keep_track:
+                    mus.append(mu)
+                    covs.append(cov)
+                    elbos.append(elbo)
+                else:
+                    mus = mu
+                    covs = cov
+                    elbos = elbo
                 
+                times.append(time.time()-start_time)
         #end of session and return
         return {"mus" : mus,
                 "covs" : covs,
                 "elbos" : elbos,
-                "times" : times}
+                "times" : times,
+                "status" : status}
             
     def read_chunks(self, file, sess):
         """
