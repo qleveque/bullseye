@@ -1,13 +1,13 @@
 """
-    The ``Bullseye`` module
+    The ``bullseye_graph`` module
     ======================
  
-    Contains the definition of the Bullseye_graph class, allowing to create a graph 
+    Contains the definition of the Bullseye.Graph class, allowing to create a graph 
     with specific options and to launch the Bullseye algorithm.
     
     :Example:
     >>> from Bullseye import Bullseye_graph
-    >>> bull = Bullseye_graph()
+    >>> bull = Bullseye.Graph()
     >>> bull.feed_with(file = "dataset.csv", chunksize = 50, k=10)
     >>> bull.set_model("multilogit")
     >>> bull.init_with(mu_0 = 0, cov_0 = 1)
@@ -97,7 +97,7 @@ class Graph:
                 #same as natural_param_likelihood for the prior
                 "natural_param_prior"       : False,
                 #make the run silent or not
-                "silent"                    : False
+                "silent"                    : True
                 }        
         self.option_list = list(options)
         self.in_graph = None
@@ -375,7 +375,7 @@ class Graph:
                     #set computed e,rho,beta to 0
                     sess.run(ops["init_globals"])
                     #going through each chunk and update e,rho,beta
-                    d_computed = self.read_chunks(file,sess)
+                    d_computed = self.read_chunks(self.file,sess)
                 
                 #compute new elbo                  
                 new_elbo  = sess.run(ops["new_ELBO"], feed_dict = d_computed)

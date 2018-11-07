@@ -1,0 +1,201 @@
+,method,times,status
+0,np_data,1.6536002159118652,accepted
+1,np_data,1.0139997005462646,accepted
+2,np_data,0.9983999729156494,accepted
+3,np_data,1.0140001773834229,accepted
+4,np_data,1.0139999389648438,accepted
+5,np_data,0.49919986724853516,not accepted
+6,np_data,0.5148003101348877,not accepted
+7,np_data,0.4835999011993408,not accepted
+8,np_data,0.5148000717163086,not accepted
+9,np_data,0.49919986724853516,not accepted
+0,np_data,1.5911998748779297,accepted
+1,np_data,0.9983999729156494,accepted
+2,np_data,0.9828000068664551,accepted
+3,np_data,0.9983999729156494,accepted
+4,np_data,0.9828000068664551,accepted
+5,np_data,0.5304000377655029,not accepted
+6,np_data,0.49920010566711426,not accepted
+7,np_data,0.49919986724853516,not accepted
+8,np_data,0.49920010566711426,not accepted
+9,np_data,0.49919986724853516,not accepted
+0,np_data,1.5922000408172607,accepted
+1,np_data,1.029599905014038,accepted
+2,np_data,0.49920010566711426,not accepted
+3,np_data,0.49919986724853516,not accepted
+4,np_data,0.49920010566711426,not accepted
+5,np_data,0.4836001396179199,not accepted
+6,np_data,0.4835999011993408,not accepted
+7,np_data,0.49919986724853516,not accepted
+8,np_data,0.49920010566711426,not accepted
+9,np_data,0.4836001396179199,not accepted
+0,np_data,1.5756001472473145,accepted
+1,np_data,1.0139997005462646,accepted
+2,np_data,0.49920010566711426,not accepted
+3,np_data,0.4836001396179199,not accepted
+4,np_data,0.49919986724853516,not accepted
+5,np_data,0.4835999011993408,not accepted
+6,np_data,0.4836001396179199,not accepted
+7,np_data,0.49920010566711426,not accepted
+8,np_data,0.49919986724853516,not accepted
+9,np_data,0.9828000068664551,accepted
+0,np_data,1.5911998748779297,accepted
+1,np_data,0.9983999729156494,accepted
+2,np_data,0.5148000717163086,not accepted
+3,np_data,0.49919986724853516,not accepted
+4,np_data,0.5304000377655029,not accepted
+5,np_data,0.4836001396179199,not accepted
+6,np_data,0.5147998332977295,not accepted
+7,np_data,0.49920010566711426,not accepted
+8,np_data,0.49919986724853516,not accepted
+9,np_data,0.4836001396179199,not accepted
+0,np_data,1.5756001472473145,accepted
+1,np_data,0.9672000408172607,accepted
+2,np_data,0.5147998332977295,not accepted
+3,np_data,0.5148000717163086,not accepted
+4,np_data,0.5147998332977295,not accepted
+5,np_data,0.5148003101348877,not accepted
+6,np_data,0.49919986724853516,not accepted
+7,np_data,0.5147998332977295,not accepted
+8,np_data,0.4836001396179199,not accepted
+9,np_data,0.49920010566711426,not accepted
+0,np_data,1.5912001132965088,accepted
+1,np_data,1.0139997005462646,accepted
+2,np_data,0.49920010566711426,not accepted
+3,np_data,0.4836001396179199,not accepted
+4,np_data,0.49919986724853516,not accepted
+5,np_data,0.5148003101348877,not accepted
+6,np_data,0.4835999011993408,not accepted
+7,np_data,0.5303997993469238,not accepted
+8,np_data,0.5460002422332764,not accepted
+9,np_data,0.49919986724853516,not accepted
+0,np_data,1.5911998748779297,accepted
+1,np_data,0.9983999729156494,accepted
+2,np_data,0.49920010566711426,not accepted
+3,np_data,0.4835999011993408,not accepted
+4,np_data,0.49919986724853516,not accepted
+5,np_data,0.49920010566711426,not accepted
+6,np_data,0.49919986724853516,not accepted
+7,np_data,0.5148003101348877,not accepted
+8,np_data,0.5147998332977295,not accepted
+9,np_data,0.4836001396179199,not accepted
+0,np_data,1.559999942779541,accepted
+1,np_data,0.9983999729156494,accepted
+2,np_data,0.5460002422332764,not accepted
+3,np_data,0.49919986724853516,not accepted
+4,np_data,0.5147998332977295,not accepted
+5,np_data,0.4836001396179199,not accepted
+6,np_data,0.5002000331878662,not accepted
+7,np_data,0.4836001396179199,not accepted
+8,np_data,0.4835999011993408,not accepted
+9,np_data,0.5148000717163086,not accepted
+0,np_data,1.606799840927124,accepted
+1,np_data,1.0140001773834229,accepted
+2,np_data,0.49920010566711426,not accepted
+3,np_data,0.49919986724853516,not accepted
+4,np_data,0.49920010566711426,not accepted
+5,np_data,0.49919986724853516,not accepted
+6,np_data,0.4835999011993408,not accepted
+7,np_data,0.49920010566711426,not accepted
+8,np_data,0.5148000717163086,not accepted
+9,np_data,0.49920010566711426,not accepted
+0,streaming,1.0920000076293945,accepted
+1,streaming,0.7644000053405762,accepted
+2,streaming,0.7176001071929932,accepted
+3,streaming,0.7487998008728027,not accepted
+4,streaming,0.7332000732421875,not accepted
+5,streaming,0.7332000732421875,not accepted
+6,streaming,0.7331998348236084,not accepted
+7,streaming,0.7332000732421875,not accepted
+8,streaming,0.7342002391815186,accepted
+9,streaming,0.7175998687744141,not accepted
+0,streaming,1.107600212097168,accepted
+1,streaming,0.7643997669219971,accepted
+2,streaming,0.7176001071929932,accepted
+3,streaming,0.7332000732421875,accepted
+4,streaming,0.7331998348236084,accepted
+5,streaming,0.7332003116607666,accepted
+6,streaming,0.7331998348236084,not accepted
+7,streaming,0.7332000732421875,not accepted
+8,streaming,0.7331998348236084,not accepted
+9,streaming,0.7332000732421875,not accepted
+0,streaming,1.076399803161621,accepted
+1,streaming,0.7644000053405762,accepted
+2,streaming,0.7332000732421875,accepted
+3,streaming,0.7332000732421875,not accepted
+4,streaming,0.7488000392913818,not accepted
+5,streaming,0.7331998348236084,accepted
+6,streaming,0.7332000732421875,accepted
+7,streaming,0.7176001071929932,not accepted
+8,streaming,0.7331998348236084,not accepted
+9,streaming,0.7332000732421875,not accepted
+0,streaming,1.1387999057769775,accepted
+1,streaming,0.7176003456115723,accepted
+2,streaming,0.717599630355835,accepted
+3,streaming,0.7488000392913818,not accepted
+4,streaming,0.7332000732421875,not accepted
+5,streaming,0.7332003116607666,accepted
+6,streaming,0.717599630355835,not accepted
+7,streaming,0.7488000392913818,not accepted
+8,streaming,0.7332000732421875,not accepted
+9,streaming,0.7176001071929932,not accepted
+0,streaming,1.0920000076293945,accepted
+1,streaming,0.7488000392913818,accepted
+2,streaming,0.7331998348236084,accepted
+3,streaming,0.7488000392913818,accepted
+4,streaming,0.7332000732421875,not accepted
+5,streaming,0.7332000732421875,not accepted
+6,streaming,0.7175998687744141,not accepted
+7,streaming,0.7332000732421875,not accepted
+8,streaming,0.7175998687744141,not accepted
+9,streaming,0.7644002437591553,accepted
+0,streaming,1.1388001441955566,accepted
+1,streaming,0.7332000732421875,accepted
+2,streaming,0.7331998348236084,accepted
+3,streaming,0.7332003116607666,not accepted
+4,streaming,0.7331998348236084,not accepted
+5,streaming,0.7332000732421875,not accepted
+6,streaming,0.7331998348236084,accepted
+7,streaming,0.7332000732421875,accepted
+8,streaming,0.7332000732421875,not accepted
+9,streaming,0.7175998687744141,not accepted
+0,streaming,1.076399803161621,accepted
+1,streaming,0.7332003116607666,accepted
+2,streaming,0.7331998348236084,accepted
+3,streaming,0.7332000732421875,accepted
+4,streaming,0.7331998348236084,not accepted
+5,streaming,0.7332000732421875,accepted
+6,streaming,0.7332000732421875,not accepted
+7,streaming,0.7332000732421875,not accepted
+8,streaming,0.7331998348236084,not accepted
+9,streaming,0.7332000732421875,not accepted
+0,streaming,1.154400110244751,accepted
+1,streaming,0.7488000392913818,accepted
+2,streaming,0.7488000392913818,not accepted
+3,streaming,0.7175998687744141,not accepted
+4,streaming,0.7332000732421875,not accepted
+5,streaming,0.7488000392913818,not accepted
+6,streaming,0.7331998348236084,not accepted
+7,streaming,0.7332003116607666,not accepted
+8,streaming,0.7331998348236084,not accepted
+9,streaming,0.7332000732421875,accepted
+0,streaming,1.1075999736785889,accepted
+1,streaming,0.7799999713897705,accepted
+2,streaming,0.7488000392913818,not accepted
+3,streaming,0.7175998687744141,not accepted
+4,streaming,0.7332003116607666,not accepted
+5,streaming,0.7488000392913818,not accepted
+6,streaming,0.7175998687744141,not accepted
+7,streaming,0.7644000053405762,accepted
+8,streaming,0.7487998008728027,accepted
+9,streaming,0.7332003116607666,not accepted
+0,streaming,1.1075999736785889,accepted
+1,streaming,0.7488000392913818,accepted
+2,streaming,0.7331998348236084,accepted
+3,streaming,0.7488000392913818,not accepted
+4,streaming,0.7488000392913818,not accepted
+5,streaming,0.7332000732421875,not accepted
+6,streaming,0.7332000732421875,not accepted
+7,streaming,0.7332000732421875,not accepted
+8,streaming,0.7331998348236084,not accepted
+9,streaming,0.7488000392913818,not accepted

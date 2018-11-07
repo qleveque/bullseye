@@ -1,0 +1,201 @@
+,method,times,status
+0,flattening_act,1.7472000122070312,accepted
+1,flattening_act,0.9983999729156494,accepted
+2,flattening_act,0.5615999698638916,not accepted
+3,flattening_act,0.49920010566711426,not accepted
+4,flattening_act,0.5615999698638916,not accepted
+5,flattening_act,0.49920010566711426,not accepted
+6,flattening_act,0.5148000717163086,not accepted
+7,flattening_act,0.5147998332977295,not accepted
+8,flattening_act,0.49920010566711426,not accepted
+9,flattening_act,1.029599905014038,accepted
+0,flattening_act,1.5756001472473145,accepted
+1,flattening_act,0.9983999729156494,accepted
+2,flattening_act,0.5148000717163086,not accepted
+3,flattening_act,0.5148000717163086,not accepted
+4,flattening_act,0.4835999011993408,not accepted
+5,flattening_act,0.49919986724853516,not accepted
+6,flattening_act,0.4836001396179199,not accepted
+7,flattening_act,0.5147998332977295,not accepted
+8,flattening_act,0.5304000377655029,not accepted
+9,flattening_act,1.0140001773834229,accepted
+0,flattening_act,1.6536002159118652,accepted
+1,flattening_act,1.0139997005462646,accepted
+2,flattening_act,0.5148003101348877,not accepted
+3,flattening_act,0.49919986724853516,not accepted
+4,flattening_act,0.5147998332977295,not accepted
+5,flattening_act,0.5304000377655029,not accepted
+6,flattening_act,0.5304000377655029,not accepted
+7,flattening_act,0.5148000717163086,not accepted
+8,flattening_act,0.5147998332977295,not accepted
+9,flattening_act,0.5148003101348877,not accepted
+0,flattening_act,1.606799840927124,accepted
+1,flattening_act,1.0608000755310059,accepted
+2,flattening_act,1.0139999389648438,accepted
+3,flattening_act,0.5304000377655029,not accepted
+4,flattening_act,0.49920010566711426,not accepted
+5,flattening_act,0.49919986724853516,not accepted
+6,flattening_act,0.5148000717163086,not accepted
+7,flattening_act,0.5460000038146973,not accepted
+8,flattening_act,0.5304000377655029,not accepted
+9,flattening_act,0.5304000377655029,not accepted
+0,flattening_act,1.731600046157837,accepted
+1,flattening_act,0.9983999729156494,accepted
+2,flattening_act,0.49920010566711426,not accepted
+3,flattening_act,0.49919986724853516,not accepted
+4,flattening_act,0.49920010566711426,not accepted
+5,flattening_act,0.49919986724853516,not accepted
+6,flattening_act,0.49920010566711426,not accepted
+7,flattening_act,0.5304000377655029,not accepted
+8,flattening_act,0.4836001396179199,not accepted
+9,flattening_act,0.49919986724853516,not accepted
+0,flattening_act,1.5911998748779297,accepted
+1,flattening_act,1.0462000370025635,accepted
+2,flattening_act,0.5147998332977295,not accepted
+3,flattening_act,0.5615999698638916,not accepted
+4,flattening_act,0.5304000377655029,not accepted
+5,flattening_act,0.577200174331665,not accepted
+6,flattening_act,0.5147998332977295,not accepted
+7,flattening_act,0.49920010566711426,not accepted
+8,flattening_act,0.5148000717163086,not accepted
+9,flattening_act,0.5304000377655029,not accepted
+0,flattening_act,1.6535999774932861,accepted
+1,flattening_act,1.0140001773834229,accepted
+2,flattening_act,0.5304000377655029,not accepted
+3,flattening_act,0.5147998332977295,not accepted
+4,flattening_act,0.5148000717163086,not accepted
+5,flattening_act,0.49920010566711426,not accepted
+6,flattening_act,0.5147998332977295,not accepted
+7,flattening_act,0.4836001396179199,not accepted
+8,flattening_act,0.5147998332977295,not accepted
+9,flattening_act,0.5148000717163086,not accepted
+0,flattening_act,1.6380000114440918,accepted
+1,flattening_act,0.9828000068664551,accepted
+2,flattening_act,0.5148000717163086,not accepted
+3,flattening_act,0.49920010566711426,not accepted
+4,flattening_act,0.5147998332977295,not accepted
+5,flattening_act,0.49919986724853516,not accepted
+6,flattening_act,0.49920010566711426,not accepted
+7,flattening_act,0.5148000717163086,not accepted
+8,flattening_act,0.5304000377655029,not accepted
+9,flattening_act,0.49920010566711426,not accepted
+0,flattening_act,1.606799840927124,accepted
+1,flattening_act,1.029599905014038,accepted
+2,flattening_act,0.5148003101348877,not accepted
+3,flattening_act,0.5147998332977295,not accepted
+4,flattening_act,0.5148000717163086,not accepted
+5,flattening_act,0.5304000377655029,not accepted
+6,flattening_act,0.5147998332977295,not accepted
+7,flattening_act,0.579200029373169,not accepted
+8,flattening_act,0.5095999240875244,not accepted
+9,flattening_act,0.49920010566711426,not accepted
+0,flattening_act,1.5756001472473145,accepted
+1,flattening_act,1.0140001773834229,accepted
+2,flattening_act,0.49919986724853516,not accepted
+3,flattening_act,0.5147998332977295,not accepted
+4,flattening_act,0.4836001396179199,not accepted
+5,flattening_act,0.49920010566711426,not accepted
+6,flattening_act,0.5304000377655029,not accepted
+7,flattening_act,0.5304000377655029,not accepted
+8,flattening_act,0.5147998332977295,not accepted
+9,flattening_act,0.49919986724853516,not accepted
+0,mapfn_act,1.638000249862671,accepted
+1,mapfn_act,0.9672000408172607,accepted
+2,mapfn_act,1.0139999389648438,accepted
+3,mapfn_act,0.5148000717163086,not accepted
+4,mapfn_act,0.49919986724853516,not accepted
+5,mapfn_act,0.49920010566711426,not accepted
+6,mapfn_act,0.5147998332977295,not accepted
+7,mapfn_act,0.5148000717163086,not accepted
+8,mapfn_act,0.4835999011993408,not accepted
+9,mapfn_act,0.4836001396179199,not accepted
+0,mapfn_act,1.5912001132965088,accepted
+1,mapfn_act,0.9983999729156494,accepted
+2,mapfn_act,0.49920010566711426,not accepted
+3,mapfn_act,0.5148000717163086,not accepted
+4,mapfn_act,0.49919986724853516,not accepted
+5,mapfn_act,0.49920010566711426,not accepted
+6,mapfn_act,0.5147998332977295,not accepted
+7,mapfn_act,0.5148000717163086,not accepted
+8,mapfn_act,0.49920010566711426,not accepted
+9,mapfn_act,0.5147998332977295,not accepted
+0,mapfn_act,1.6535999774932861,accepted
+1,mapfn_act,0.9984002113342285,accepted
+2,mapfn_act,0.5148000717163086,not accepted
+3,mapfn_act,0.4835999011993408,not accepted
+4,mapfn_act,0.5148000717163086,not accepted
+5,mapfn_act,0.5147998332977295,not accepted
+6,mapfn_act,0.5148000717163086,not accepted
+7,mapfn_act,0.49920010566711426,not accepted
+8,mapfn_act,0.5147998332977295,not accepted
+9,mapfn_act,0.5148000717163086,not accepted
+0,mapfn_act,1.5755996704101562,accepted
+1,mapfn_act,0.9983999729156494,accepted
+2,mapfn_act,0.49920010566711426,not accepted
+3,mapfn_act,0.49920010566711426,not accepted
+4,mapfn_act,0.49919986724853516,not accepted
+5,mapfn_act,0.5148000717163086,not accepted
+6,mapfn_act,0.4836001396179199,not accepted
+7,mapfn_act,0.49920010566711426,not accepted
+8,mapfn_act,0.4835999011993408,not accepted
+9,mapfn_act,0.5148000717163086,not accepted
+0,mapfn_act,1.5912001132965088,accepted
+1,mapfn_act,1.0139999389648438,accepted
+2,mapfn_act,0.49919986724853516,not accepted
+3,mapfn_act,0.5148000717163086,not accepted
+4,mapfn_act,0.5148000717163086,not accepted
+5,mapfn_act,0.5303997993469238,not accepted
+6,mapfn_act,0.5148003101348877,not accepted
+7,mapfn_act,0.5303997993469238,not accepted
+8,mapfn_act,0.4835999011993408,not accepted
+9,mapfn_act,0.5148003101348877,not accepted
+0,mapfn_act,1.5912001132965088,accepted
+1,mapfn_act,1.029599905014038,accepted
+2,mapfn_act,0.49920010566711426,not accepted
+3,mapfn_act,0.4836001396179199,not accepted
+4,mapfn_act,0.49919986724853516,not accepted
+5,mapfn_act,0.4835999011993408,not accepted
+6,mapfn_act,0.4836001396179199,not accepted
+7,mapfn_act,0.5147998332977295,not accepted
+8,mapfn_act,0.49920010566711426,not accepted
+9,mapfn_act,0.49920010566711426,not accepted
+0,mapfn_act,1.5756001472473145,accepted
+1,mapfn_act,0.9828000068664551,accepted
+2,mapfn_act,0.49920010566711426,not accepted
+3,mapfn_act,0.5304000377655029,not accepted
+4,mapfn_act,0.5303997993469238,not accepted
+5,mapfn_act,0.49920010566711426,not accepted
+6,mapfn_act,0.5147998332977295,not accepted
+7,mapfn_act,0.5148000717163086,not accepted
+8,mapfn_act,0.5148000717163086,not accepted
+9,mapfn_act,1.0139999389648438,accepted
+0,mapfn_act,1.5912001132965088,accepted
+1,mapfn_act,1.029599905014038,accepted
+2,mapfn_act,0.5148000717163086,not accepted
+3,mapfn_act,0.49920010566711426,not accepted
+4,mapfn_act,0.4835999011993408,not accepted
+5,mapfn_act,0.5148000717163086,not accepted
+6,mapfn_act,0.5304000377655029,not accepted
+7,mapfn_act,0.49919986724853516,not accepted
+8,mapfn_act,0.4835999011993408,not accepted
+9,mapfn_act,0.49920010566711426,not accepted
+0,mapfn_act,1.5912001132965088,accepted
+1,mapfn_act,0.9828000068664551,accepted
+2,mapfn_act,0.49920010566711426,not accepted
+3,mapfn_act,0.5147998332977295,not accepted
+4,mapfn_act,0.5148000717163086,not accepted
+5,mapfn_act,0.5147998332977295,not accepted
+6,mapfn_act,0.5148003101348877,not accepted
+7,mapfn_act,0.49919986724853516,not accepted
+8,mapfn_act,0.49920010566711426,not accepted
+9,mapfn_act,0.4835999011993408,not accepted
+0,mapfn_act,1.5755996704101562,accepted
+1,mapfn_act,0.9828002452850342,accepted
+2,mapfn_act,0.5459997653961182,not accepted
+3,mapfn_act,0.49920010566711426,not accepted
+4,mapfn_act,0.4836001396179199,not accepted
+5,mapfn_act,0.49919986724853516,not accepted
+6,mapfn_act,0.49920010566711426,not accepted
+7,mapfn_act,0.5147998332977295,not accepted
+8,mapfn_act,0.5148000717163086,not accepted
+9,mapfn_act,0.6083998680114746,not accepted

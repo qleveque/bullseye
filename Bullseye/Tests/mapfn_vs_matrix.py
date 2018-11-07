@@ -2,9 +2,6 @@ import time
 import os
 import pandas as pd
 
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 import Bullseye
 from Bullseye import generate_multilogit
 from Bullseye.visual import *
@@ -31,8 +28,8 @@ def mapfn_vs_matrix():
                 Option("autograd mtrx", "aut_grad", "mapfn"),
                 Option("autograd mtrx, proj. matrx", "aut_grad", "")]
     
-    n_iter = 2
-    num_of_loops = 2
+    n_iter = 10
+    num_of_loops = 10
     
     for option in options:
         print_title(option.name)
@@ -50,15 +47,5 @@ def mapfn_vs_matrix():
             df_ = pd.DataFrame({'method' : n_iter*[option.name], 'times' : d["times"], 'status': d["status"]})
             df = df.append(df_)
     
-    dict_times = {}
-    for option in options:
-        dict_times[option.name]=option.times
-        
-    
     with open(result_filename, "w", encoding = 'utf-8') as f:
         df.to_csv(result_filename)
-        
-def plot_mapfn_vs_matrix():
-    df = pd.read_csv(result_filename)
-    sns.boxplot(x="method", y="times",data=df)
-    plt.show()

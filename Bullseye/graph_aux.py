@@ -24,10 +24,12 @@ def activated_functions_flatten(A,Y,Phi,grad_Phi,hess_Phi):
     #flatten data
     A_flat = tf.reshape(A, [s*n,k])
     Y_flat = tf.tile(Y, (s,1))
+    
     #compute flatten activated functions
     phi_flat = Phi(A_flat, Y_flat) #[s*n]
     grad_phi_flat = grad_Phi(A_flat, Y_flat) #[s*n,k]
     hess_phi_flat = hess_Phi(A_flat, Y_flat) #[s*n,k,k]
+    
     #split to return
     phi = tf.reshape(phi_flat, [s,n])
     grad_phi = tf.reshape(grad_phi_flat, [s,n,k])
