@@ -1,1 +1,2 @@
-include Bullseye/Tests/data/*
+include README.md
+include Bullseye/Tests/data/*.py

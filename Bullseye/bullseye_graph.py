@@ -126,7 +126,7 @@ class Graph:
              need to specify there sizes with d and k. in this
              case, X and Y need to be specified when run() will
              be called
-        Method 3: requires file, chunksize, k and prior_std
+        Method 3: requires file, chunksize and k
             to stream a file.
         
         :param X: design matrix.
@@ -317,7 +317,7 @@ class Graph:
         #remember this method is called, to prevent errors
         self.build_is_called = True
     
-    def run(self, n_iter = 10, X = None, Y = None, keep_track=False):
+    def run(self, n_iter = 10, X = None, Y = None, keep_track=False, timeline=False):
         """
         run the implicit tensorflow graph.
         
@@ -347,10 +347,20 @@ class Graph:
         #easy access to the tensorflow graph operations
         ops = self.in_graph
         
+        #for timing
+        if timeline:
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+            run_kwargs = {'options' : run_options, 'run_metadata' : run_metadata}
+        else:
+            run_options = None
+            run_metadata = None
+            run_kwargs = {}
+        
         #start the session
         with tf.Session(graph = self.graph) as sess:
             #initialize the graph
-            sess.run(ops["init"])
+            sess.run(ops["init"],**run_kwargs)
             
             #starting iterations
             for epoch in range(n_iter):
@@ -373,12 +383,16 @@ class Graph:
                 else:
                     #streaming through a file
                     #set computed e,rho,beta to 0
-                    sess.run(ops["init_globals"])
+                    sess.run(ops["init_globals"],**run_kwargs)
                     #going through each chunk and update e,rho,beta
-                    d_computed = self.read_chunks(self.file,sess)
+                    d_computed = self.read_chunks(self.file,
+                                                  sess,
+                                                  run_kwargs = run_kwargs)
                 
                 #compute new elbo                  
-                new_elbo  = sess.run(ops["new_ELBO"], feed_dict = d_computed)
+                new_elbo  = sess.run(ops["new_ELBO"],
+                                    feed_dict = d_computed,
+                                    **run_kwargs)
                 
                 #if new ELBO is not better
                 if new_elbo<=elbo:
@@ -389,7 +403,7 @@ class Graph:
                 #if ELBO is better
                 else:
                     #update Σ,μ
-                    sess.run(ops["update_ops"], feed_dict = d_computed)
+                    sess.run(ops["update_ops"],feed_dict = d_computed)
                     elbo = new_elbo
                     status.append("accepted")
                     
@@ -397,25 +411,26 @@ class Graph:
                 print("{stat} : {elbo}".format(elbo=new_elbo,stat=status[-1]))
                 
                 #save the current state
-                mu, cov = sess.run([ops["mu"], ops["cov"]])
-                if not keep_track:
+                if keep_track:
+                    mu, cov = sess.run([ops["mu"], ops["cov"]])
                     mus.append(mu)
                     covs.append(cov)
-                    elbos.append(elbo)
-                else:
-                    mus = mu
-                    covs = cov
-                    elbos = elbo
                 
+                elbos.append(elbo)
                 times.append(time.time()-start_time)
+            
+            #get the lasts mu, covs
+            if not keep_track:
+                mus, covs = sess.run([ops["mu"], ops["cov"]])
         #end of session and return
         return {"mus" : mus,
                 "covs" : covs,
                 "elbos" : elbos,
                 "times" : times,
-                "status" : status}
+                "status" : status,
+                "metadata" : run_metadata}
             
-    def read_chunks(self, file, sess):
+    def read_chunks(self, file, sess, run_kwargs):
         """
         update global_e, global_rho and global_beta while streaming through the file
         
@@ -429,8 +444,8 @@ class Graph:
         """
         #create a pandas reader
         reader = pd.read_table(self.file, 
-                                sep = ",",
-                                chunksize = self.chunksize)
+                               sep = ",",
+                               chunksize = self.chunksize)
         #for simplicity
         ops = self.in_graph
     
@@ -453,14 +468,15 @@ class Graph:
             
             #add to e,ρ and β current eᵢ,ρᵢ and βᵢ
             if self.chunk_as_sum:
-                sess.run(ops["update_globals"], feed_dict = d_)
+                sess.run(ops["update_globals"], feed_dict = d_, **run_kwargs)
             #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
             else:
                 to_compute = ["computed_e","computed_rho","computed_beta",
                     "computed_e_prior","computed_rho_prior","computed_beta_prior"]
                 ce, cr, cb, cep, crp, cbp =\
                     sess.run([ops[op] for op in to_compute],
-                             feed_dict = d_)
+                             feed_dict = d_,
+                             **run_kwargs)
                 
                 computed_e_ = np.vstack((computed_e_,(ce + cep)))
                 computed_rho_ = np.vstack((computed_rho_,(cr + crp)))

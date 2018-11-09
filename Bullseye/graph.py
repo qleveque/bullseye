@@ -82,16 +82,23 @@ def construct_bullseye_graph(G):
 
     #new_cov, new_mu
     new_cov = tf.linalg.inv(step_size * beta + (1-step_size) * tf.linalg.inv(cov))
+    tf.identity(new_cov, name = "new_cov")
     new_mu  = mu - step_size * tf.einsum('ij,j->i', new_cov, rho)
+    tf.identity(new_mu, name = "new_mu")
     
     #SVD decomposition of new_cov
     new_cov_S, new_cov_U, new_cov_V = tf.linalg.svd(new_cov)
+    tf.identity(new_cov_S, name = "new_cov_S")
     new_cov_S_sqrt = tf.linalg.diag(tf.sqrt(new_cov_S))
+    tf.identity(new_cov_S_sqrt, name = "new_cov_S_sqrt")
     new_cov_sqrt = tf.matmul(new_cov_U,
                              tf.matmul(new_cov_S_sqrt,new_cov_V, adjoint_b=True)) #[p,p]
-
+    tf.identity(new_cov_sqrt, name = "new_cov_sqrt")
+    
     #sampling related
     z, z_weights = generate_sampling_tf(G.s, dim_samp)
+    tf.identity(z, name = "z")
+    tf.identity(z_weights, name = "z_weights")
     
     z_array_prior, weights_array_prior =\
         np.polynomial.hermite.hermgauss(G.quadrature_deg)
@@ -103,7 +110,9 @@ def construct_bullseye_graph(G):
                             [G.quadrature_deg],
                             initializer = tic(weights_array_prior),
                             dtype = tf.float32)
-
+    tf.identity(z_prior, name = "z_prior")
+    tf.identity(z_weights_prior, name = "z_weights_prior")
+    
     """
     TRIPLETS
     """
@@ -118,7 +127,12 @@ def construct_bullseye_graph(G):
     else :
         computed_e, computed_rho, computed_beta = \
             batched_likelihood_triplet(G,X,Y,*ltargs)
-            
+    
+    tf.identity(computed_e, name = "computed_e")
+    tf.identity(computed_rho, name = "computed_rho")
+    tf.identity(computed_beta, name = "computed_beta")
+    
+    
     #PRIO TRIPLET
     #for readability
     ptargs = [new_mu,new_cov,z_prior,z_weights_prior]
@@ -130,6 +144,10 @@ def construct_bullseye_graph(G):
     else:
         computed_e_prior, computed_rho_prior, computed_beta_prior =\
             batched_prior_triplet(G, prior_std, *ptargs)
+    
+    tf.identity(computed_e_prior, name = "computed_e_prior")
+    tf.identity(computed_rho_prior, name = "computed_rho_prior")
+    tf.identity(computed_beta_prior, name = "computed_beta_prior")
     
     """
     FOR CHUNKS
@@ -158,8 +176,14 @@ def construct_bullseye_graph(G):
         update_global_beta = tf.assign(global_beta,
                                     global_beta + computed_beta + computed_beta_prior)
         
+        tf.identity(update_global_e, name = "update_global_e")
+        tf.identity(update_global_rho, name = "update_global_rho")
+        tf.identity(update_global_beta, name = "update_global_beta")
+        
         update_globals = [update_global_e, update_global_rho, update_global_beta]
+        tf.identity(update_globals, name = "update_globals")
         init_globals = tf.variables_initializer([global_e, global_rho, global_beta])
+        tf.identity(init_globals, name = "init_globals")
         
     #chunk as list : the sum will be computed outside of the graph
     elif G.file is not None and not G.chunk_as_sum:
@@ -187,11 +211,17 @@ def construct_bullseye_graph(G):
         new_e = global_e
         new_rho = global_rho
         new_beta = global_beta
+            
+    tf.identity(new_e, name = "new_e")
+    tf.identity(new_rho, name = "new_rho")
+    tf.identity(new_beta, name = "new_beta")
         
     #new ELBO
     new_ELBO = - new_e \
                + 0.5 * tf.linalg.logdet(new_cov) \
                + 0.5 * np.log(2*np.pi*np.e)
+    
+    tf.identity(new_ELBO, name = "new_ELBO")
     
     """
     ACCEPTED UPDATE
