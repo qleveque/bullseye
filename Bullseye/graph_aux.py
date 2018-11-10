@@ -83,7 +83,7 @@ def likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt,z,z_weights):
         local_std = compute_local_std_trick(A_array, new_cov_sqrt) #[n,p,k]
     else:
         A_to_use = A_array_kernel if G.compute_kernel else A_array
-        local_std = compute_local_std_lazy(A_to_use, new_cov, compute_kernel) #[n,k,k]
+        local_std = compute_local_std_lazy(A_to_use, new_cov, G.compute_kernel) #[n,k,k]
         
     activations = tf.expand_dims(local_mu,0)\
                 + tf.einsum('npk,sp->snk', local_std,z) #[s,n,k]

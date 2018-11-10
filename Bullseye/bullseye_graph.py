@@ -25,7 +25,7 @@ from .graph import construct_bullseye_graph
 from .predefined_functions import get_predefined_functions
 from .utils import *
 from .warning_handler import *
-from .timeliner import TimeLiner
+from .profilers import TimeLiner, Profiler
 
 """
     The ``Bullseye`` class
@@ -324,7 +324,8 @@ class Graph:
         #remember this method is called, to prevent errors
         self.build_is_called = True
     
-    def run(self, n_iter = 10, X = None, Y = None, keep_track=False, timeline_path=None):
+    def run(self, n_iter = 10, X = None, Y = None,
+            keep_track=False, timeline_path=None, profiler_dir=None):
         """
         run the implicit tensorflow graph.
         
@@ -354,16 +355,20 @@ class Graph:
         ops = self.in_graph
         
         #for timing
+        run_options = None
+        run_metadata = None
+        runs_timeline = None
+        run_kwargs = {}
         if timeline_path is not None:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
             runs_timeline = TimeLiner()
             run_kwargs = {'options' : run_options, 'run_metadata' : run_metadata}
-        else:
-            run_options = None
-            run_metadata = None
-            runs_timeline = None
-            run_kwargs = {}
+            
+        #for profiler
+        profiler = None
+        if profiler_dir is not None:
+            profiler = Profiler(profiler_dir)
         
         #start the session
         with tf.Session(graph = self.graph) as sess:
@@ -396,14 +401,21 @@ class Graph:
                     self.set_globals_from_chunks(self.file,
                                                 sess,
                                                 run_kwargs = run_kwargs,
-                                                runs_timeline = runs_timeline)
-
+                                                runs_timeline = runs_timeline,
+                                                profiler = profiler)
+                #prepare profiler
+                if profiler is not None:
+                    profiler.prepare_next_step()
+                    
                 #compute new elbo
                 statu, elbo = sess.run(ops["iteration"], feed_dict = d_computed)
                 
                 #handle timeline
                 if runs_timeline is not None:
                     runs_timeline.update_timeline(run_metadata)
+                #handle profiler
+                if profiler is not None:
+                    profiler.profile_operations()
                 
                 #save the current state
                 if keep_track:
@@ -423,7 +435,7 @@ class Graph:
             #save the run timeline
             if timeline_path is not None:
                 runs_timeline.save(timeline_path)
-                                                                                 
+        
         #end of session and return
         return {"mus" : mus,
                 "covs" : covs,
@@ -431,7 +443,7 @@ class Graph:
                 "times" : times,
                 "status" : status}
             
-    def set_globals_from_chunks(self, file, sess, run_kwargs, runs_timeline):
+    def set_globals_from_chunks(self, file, sess, run_kwargs, runs_timeline, profiler):
         """
         update global_e, global_rho and global_beta while streaming through the file
         
@@ -460,6 +472,10 @@ class Graph:
             #create the feeding dict
             d_ = {"X:0" : X, "Y:0" : Y}
             
+            #prepare profiler
+            if profiler is not None:
+                profiler.prepare_next_step()
+            
             #add to e,ρ and β current eᵢ,ρᵢ and βᵢ
             if self.chunk_as_sum:
                 sess.run(ops["update_globals"], feed_dict = d_, **run_kwargs)
@@ -470,6 +486,9 @@ class Graph:
             #handle timeline
             if runs_timeline is not None:
                 runs_timeline.update_timeline(run_kwargs["run_metadata"])
+            #handle profiler
+            if profiler is not None:
+                profiler.profile_operations()
             
             #end of one chunk
             if not self.silent:
