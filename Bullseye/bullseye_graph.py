@@ -382,6 +382,9 @@ class Graph:
                 #feeding dict
                 d_computed = {}
                 
+                #update covs
+                sess.run(ops["update_new_parameters"], **run_kwargs)
+                
                 #compute new e, rho, beta
                 if self.file is None:
                     #using given X and Y
@@ -408,7 +411,7 @@ class Graph:
                     profiler.prepare_next_step()
                     
                 #compute new elbo
-                statu, elbo = sess.run(ops["iteration"], feed_dict = d_computed)
+                statu, elbo = sess.run(ops["iteration"], feed_dict = d_computed, **run_kwargs)
                 
                 #handle timeline
                 if runs_timeline is not None:

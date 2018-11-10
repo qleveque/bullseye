@@ -65,7 +65,7 @@ def construct_bullseye_graph(G):
     mu = tf.get_variable("mu",[p],initializer = tic(G.mu_0),dtype = tf.float32)
     cov  = tf.get_variable("cov",[p,p],initializer = tic(G.cov_0),dtype = tf.float32)
     ELBO = tf.get_variable("elbo",[],initializer = tic(-np.infty),dtype = tf.float32)
-
+    
     #e, ρ and β related
     e = tf.get_variable("e",[],initializer = tf.zeros_initializer,dtype = tf.float32)
     rho = tf.get_variable("rho",
@@ -84,19 +84,36 @@ def construct_bullseye_graph(G):
                                 dtype = tf.float32)
 
     #new_cov, new_mu
-    new_cov = tf.linalg.inv(step_size * beta + (1-step_size) * tf.linalg.inv(cov))
-    tf.identity(new_cov, name = "new_cov")
-    new_mu  = mu - step_size * tf.einsum('ij,j->i', new_cov, rho)
-    tf.identity(new_mu, name = "new_mu")
+    new_cov_ = tf.linalg.inv(step_size * beta + (1-step_size) * tf.linalg.inv(cov))
+    new_mu_  = mu - step_size * tf.einsum('ij,j->i', new_cov_, rho)
+    
+    new_cov = tf.get_variable("new_cov",[p,p],
+                              initializer = tf.zeros_initializer,
+                              dtype = tf.float32)
+    new_mu = tf.get_variable("new_mu",[p],
+                              initializer = tf.zeros_initializer,
+                              dtype = tf.float32)
+                             
+    
+    update_new_cov = tf.assign(new_cov, new_cov_)
+    update_new_mu = tf.assign(new_mu, new_mu_)
     
     #SVD decomposition of new_cov
-    new_cov_S, new_cov_U, new_cov_V = tf.linalg.svd(new_cov)
-    tf.identity(new_cov_S, name = "new_cov_S")
-    new_cov_S_sqrt = tf.linalg.diag(tf.sqrt(new_cov_S))
-    tf.identity(new_cov_S_sqrt, name = "new_cov_S_sqrt")
-    new_cov_sqrt = tf.matmul(new_cov_U,
+    new_cov_S_, new_cov_U, new_cov_V = tf.linalg.svd(new_cov)
+    new_cov_S_sqrt = tf.linalg.diag(tf.sqrt(new_cov_S_))
+    new_cov_sqrt_ = tf.matmul(new_cov_U,
                              tf.matmul(new_cov_S_sqrt,new_cov_V, adjoint_b=True)) #[p,p]
-    tf.identity(new_cov_sqrt, name = "new_cov_sqrt")
+    new_cov_S = tf.get_variable("new_cov_S", [p],
+                                initializer = tf.zeros_initializer,
+                                dtype=tf.float32)
+    new_cov_sqrt = tf.get_variable("new_cov_sqrt", [p,p],
+                                   initializer = tf.zeros_initializer,
+                                   dtype = tf.float32)
+                               
+    update_new_cov_S = tf.assign(new_cov_S, new_cov_S_)
+    update_new_cov_sqrt = tf.assign(new_cov_sqrt, new_cov_sqrt_)
+
+    update_new_parameters = [update_new_cov, update_new_mu, update_new_cov_S, update_new_cov_sqrt]
     
     #sampling related
     z, z_weights = generate_sampling_tf(G.s, dim_samp)
@@ -251,8 +268,9 @@ def construct_bullseye_graph(G):
     tf.identity(new_beta, name = "new_beta")
         
     #new ELBO
+    #+ 0.5 * tf.linalg.logdet(new_cov)
     new_ELBO = - new_e \
-               + 0.5 * tf.linalg.logdet(new_cov) \
+               + 0.5 * tf.reduce_sum(tf.log(new_cov_S), axis = 0) \
                + 0.5 * np.log(2*np.pi*np.e)
     
     tf.identity(new_ELBO, name = "new_ELBO")
@@ -320,7 +338,9 @@ def construct_bullseye_graph(G):
                 'computed_beta_prior' : computed_beta_prior,
                 
                 'iteration' : iteration,
-                'status' : status
+                'status' : status,
+                
+                'update_new_parameters' : update_new_parameters
                 }
     
     return graph, ops_dict
