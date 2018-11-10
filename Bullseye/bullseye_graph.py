@@ -25,6 +25,7 @@ from .graph import construct_bullseye_graph
 from .predefined_functions import get_predefined_functions
 from .utils import *
 from .warning_handler import *
+from .timeliner import TimeLiner
 
 """
     The ``Bullseye`` class
@@ -323,7 +324,7 @@ class Graph:
         #remember this method is called, to prevent errors
         self.build_is_called = True
     
-    def run(self, n_iter = 10, X = None, Y = None, keep_track=False, timeline=False):
+    def run(self, n_iter = 10, X = None, Y = None, keep_track=False, timeline_path=None):
         """
         run the implicit tensorflow graph.
         
@@ -353,13 +354,15 @@ class Graph:
         ops = self.in_graph
         
         #for timing
-        if timeline:
+        if timeline_path is not None:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
+            runs_timeline = TimeLiner()
             run_kwargs = {'options' : run_options, 'run_metadata' : run_metadata}
         else:
             run_options = None
             run_metadata = None
+            runs_timeline = None
             run_kwargs = {}
         
         #start the session
@@ -390,12 +393,17 @@ class Graph:
                     # time as the ELBO
                 else:
                     #read chunks, and update global e, rho and beta in consequence
-                    self.read_chunks(self.file,
-                                     sess,
-                                     run_kwargs = run_kwargs)
+                    self.set_globals_from_chunks(self.file,
+                                                sess,
+                                                run_kwargs = run_kwargs,
+                                                runs_timeline = runs_timeline)
 
                 #compute new elbo
                 statu, elbo = sess.run(ops["iteration"], feed_dict = d_computed)
+                
+                #handle timeline
+                if runs_timeline is not None:
+                    runs_timeline.update_timeline(run_metadata)
                 
                 #save the current state
                 if keep_track:
@@ -411,15 +419,19 @@ class Graph:
             #get the lasts mu, covs
             if not keep_track:
                 mus, covs = sess.run([ops["mu"], ops["cov"]])
+                                                                                 
+            #save the run timeline
+            if timeline_path is not None:
+                runs_timeline.save(timeline_path)
+                                                                                 
         #end of session and return
         return {"mus" : mus,
                 "covs" : covs,
                 "elbos" : elbos,
                 "times" : times,
-                "status" : status,
-                "metadata" : run_metadata}
+                "status" : status}
             
-    def read_chunks(self, file, sess, run_kwargs):
+    def set_globals_from_chunks(self, file, sess, run_kwargs, runs_timeline):
         """
         update global_e, global_rho and global_beta while streaming through the file
         
@@ -454,6 +466,11 @@ class Graph:
             #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
             else:
                 sess.run(ops["update_globals"][i], feed_dict = d_, **run_kwargs)
+            
+            #handle timeline
+            if runs_timeline is not None:
+                runs_timeline.update_timeline(run_kwargs["run_metadata"])
+            
             #end of one chunk
             if not self.silent:
                 print("one chunk done")
