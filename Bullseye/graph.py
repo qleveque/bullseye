@@ -58,6 +58,9 @@ def construct_bullseye_graph(G):
                                     dense_shape = [p,p])
     
     
+    #status
+    status = tf.get_variable("status",[], initializer = tf.zeros_initializer, dtype = tf.string)
+    
     #μ, Σ and ELBO related
     mu = tf.get_variable("mu",[p],initializer = tic(G.mu_0),dtype = tf.float32)
     cov  = tf.get_variable("cov",[p,p],initializer = tic(G.cov_0),dtype = tf.float32)
@@ -152,45 +155,71 @@ def construct_bullseye_graph(G):
     """
     FOR CHUNKS
     """
-    #if streaming through a file as sum
-    if G.file is not None and G.chunk_as_sum:
-        global_e = tf.get_variable("global_e",
-                                    [],
-                                    initializer = tf.zeros_initializer,
-                                    dtype = tf.float32)
-        global_rho = tf.get_variable("global_rho",
-                                    [p],
-                                    initializer = tf.zeros_initializer,
-                                    dtype = tf.float32)
-        global_beta = tf.get_variable("global_beta",
-                                    [p,p],
-                                    initializer = tic(np.linalg.inv(G.cov_0)),
-                                    dtype = tf.float32)
+    
+    if G.file is not None:
+        #if streaming through a file as sum
+        if G.chunk_as_sum:
+            global_e = tf.get_variable("global_e",
+                                        [],
+                                        initializer = tf.zeros_initializer,
+                                        dtype = tf.float32)
+            global_rho = tf.get_variable("global_rho",
+                                        [p],
+                                        initializer = tf.zeros_initializer,
+                                        dtype = tf.float32)
+            global_beta = tf.get_variable("global_beta",
+                                        [p,p],
+                                        initializer = tic(np.linalg.inv(G.cov_0)),
+                                        dtype = tf.float32)
+            
+            #chunk as sum, will increase step by step global_e, global_rho and global_beta
+            # with update_globals
+            update_global_e = tf.assign(global_e,
+                                        global_e + computed_e + computed_e_prior)
+            update_global_rho = tf.assign(global_rho,
+                                        global_rho + computed_rho + computed_rho_prior)
+            update_global_beta = tf.assign(global_beta,
+                                        global_beta + computed_beta + computed_beta_prior)
         
-        #chunk as sum, will increase step by step global_e, global_rho and global_beta
-        # with update_globals
-        update_global_e = tf.assign(global_e,
-                                    global_e + computed_e + computed_e_prior)
-        update_global_rho = tf.assign(global_rho,
-                                    global_rho + computed_rho + computed_rho_prior)
-        update_global_beta = tf.assign(global_beta,
-                                    global_beta + computed_beta + computed_beta_prior)
+            init_globals = tf.variables_initializer([global_e, global_rho, global_beta])
+            
+        #chunk as list : the sum will be computed outside of the graph
+        else:
+            global_e = []
+            global_rho = []
+            global_beta = []
+            
+            update_global_e = []
+            update_global_rho = []
+            update_global_beta = []
+            
+            width = len(str(G.num_of_chunks))
+            for _ in range(G.num_of_chunks):
+                idx = "chunk_{_:0>{width}}".format(_=_, width=width)
+                global_e.append(tf.get_variable("global_e_"+idx,
+                                                [],
+                                                initializer = tf.zeros_initializer,
+                                                dtype = tf.float32))
+                global_rho.append(tf.get_variable("global_rho_"+idx,
+                                        [p],
+                                        initializer = tf.zeros_initializer,
+                                        dtype = tf.float32))
+                global_beta.append(tf.get_variable("global_beta_"+idx,
+                                        [p,p],
+                                        initializer = tic(np.linalg.inv(G.cov_0)),
+                                        dtype = tf.float32))
+                
+                update_global_e.append(tf.assign(global_e[_], computed_e + computed_e_prior))
+                update_global_rho.append(tf.assign(global_rho[_], computed_rho + computed_rho_prior))
+                update_global_beta.append(tf.assign(global_beta[_], computed_beta + computed_beta_prior))
         
+            init_globals = tf.no_op
+        #chunk
         tf.identity(update_global_e, name = "update_global_e")
         tf.identity(update_global_rho, name = "update_global_rho")
         tf.identity(update_global_beta, name = "update_global_beta")
         
         update_globals = [update_global_e, update_global_rho, update_global_beta]
-        tf.identity(update_globals, name = "update_globals")
-        init_globals = tf.variables_initializer([global_e, global_rho, global_beta])
-        tf.identity(init_globals, name = "init_globals")
-        
-    #chunk as list : the sum will be computed outside of the graph
-    elif G.file is not None and not G.chunk_as_sum:
-        global_e = tf.placeholder(tf.float32, name='global_e', shape = [])
-        global_rho = tf.placeholder(tf.float32, name='global_rho', shape = [p])
-        global_beta = tf.placeholder(tf.float32, name='global_beta', shape = [p,p])
-        update_globals, init_globals = 2*[tf.no_op()]
     
     #if not streaming through a file, they will not be used
     else:
@@ -208,9 +237,14 @@ def construct_bullseye_graph(G):
         
     #if G.file, we use global_e, global_rho and global_beta
     else:
-        new_e = global_e
-        new_rho = global_rho
-        new_beta = global_beta
+        if G.chunk_as_sum:
+            new_e = global_e
+            new_rho = global_rho
+            new_beta = global_beta
+        else: #chunk as list
+            new_e = tf.reduce_sum(global_e, axis = 0)
+            new_rho = tf.reduce_sum(global_rho, axis = 0)
+            new_beta = tf.reduce_sum(global_beta, axis = 0)
             
     tf.identity(new_e, name = "new_e")
     tf.identity(new_rho, name = "new_rho")
@@ -226,23 +260,40 @@ def construct_bullseye_graph(G):
     """
     ACCEPTED UPDATE
     """
-    update_e = tf.assign(e, new_e, name = "update_e")
-    update_rho  = tf.assign(rho,  new_rho, name = "update_rho")
-    update_beta = tf.assign(beta, new_beta, name = "update_beta")
-    
-    update_cov  = tf.assign(cov, new_cov, name = "update_cov")
-    update_mu = tf.assign(mu, new_mu, name = "update_mu")
-    update_ELBO = tf.assign(ELBO, new_ELBO, name = "update_ELBO")
-    
-    update_step_size = tf.assign(step_size, G.speed, name = "update_step_size")
-    update_ops = [update_e, update_rho, update_beta,
-                  update_cov, update_mu,
-                  update_ELBO, update_step_size]
+    def accepted_update():
+        update_e = tf.assign(e, new_e, name = "update_e")
+        update_rho  = tf.assign(rho,  new_rho, name = "update_rho")
+        update_beta = tf.assign(beta, new_beta, name = "update_beta")
+        update_cov  = tf.assign(cov, new_cov, name = "update_cov")
+        update_mu = tf.assign(mu, new_mu, name = "update_mu")
+        update_ELBO = tf.assign(ELBO, new_ELBO, name = "update_ELBO")
+        update_step_size = tf.assign(step_size, G.speed, name = "update_step_size")
+        status_to_accepted = tf.assign(status, "accepted")
+        
+        with tf.control_dependencies([update_e, update_rho, update_beta,
+                                     update_cov, update_mu, update_ELBO,
+                                     update_step_size]):
+            return [tf.assign(status, "accepted"), new_ELBO]
     
     """
     REFUSED UPDATE
     """
-    decrease_step_size = tf.assign(step_size, step_size*G.step_size_decrease_coef)
+    def refused_update():
+        decrease_step_size = tf.assign(step_size, step_size*G.step_size_decrease_coef)
+        status_to_refused = tf.assign(status, "refused")
+        with tf.control_dependencies([decrease_step_size]):
+            return [tf.assign(status, "refused"), new_ELBO]
+    
+    """
+    ITERATIONS
+    """
+    brutal_iteration = accepted_update
+    soft_iteration = tf.cond(new_ELBO > ELBO, accepted_update, refused_update)
+    
+    if G.brutal_iteration:
+        iteration = brutal_iteration
+    else:
+        iteration = soft_iteration
     
     """
     INIT and RETURN
@@ -251,8 +302,6 @@ def construct_bullseye_graph(G):
     ops_dict = {'init' : init,
                 'new_ELBO' : new_ELBO,
                 'ELBO' : ELBO,
-                'update_ops' : update_ops,
-                'decrease_step_size' : decrease_step_size,
                 'mu' : mu,
                 'cov' : cov,
                 'rho' : rho,
@@ -268,7 +317,10 @@ def construct_bullseye_graph(G):
                 'computed_rho' : computed_rho,
                 'computed_rho_prior' : computed_rho_prior,
                 'computed_beta' : computed_beta,
-                'computed_beta_prior' : computed_beta_prior
+                'computed_beta_prior' : computed_beta_prior,
+                
+                'iteration' : iteration,
+                'status' : status
                 }
     
     return graph, ops_dict

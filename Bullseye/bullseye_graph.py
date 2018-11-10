@@ -43,7 +43,7 @@ class Graph:
             #the graph itself
             "graph",
             #data related
-            "d","k","p","X","Y","prior_std","file","chunksize",
+            "d","k","p","X","Y","prior_std","file","chunksize","nb_of_chunks",
             #init
             "mu_0","cov_0",
             #functions
@@ -52,8 +52,10 @@ class Graph:
             
         #listing of all option attributes and their default values
         options = {
+                #if brutal iteration, the ELBO will be updated even if it decreases
+                "brutal_iteration"          : False,
                 #default speed of the algorithm, γ will start with this value
-                "speed"                  : 1,
+                "speed"                     : 1,
                 #γ will decrease as γ*step_size_decrease_coef when ELBO
                 # did not increase enough
                 "step_size_decrease_coef"   : 0.5,
@@ -185,11 +187,15 @@ class Graph:
             for chunk in reader:
                 data = list(chunk.shape)
                 break
+            
+            n = sum(1 for line in open(file))
+            
             self.k = k
             self.d = data[-1]-1
             self.file = file
             self.chunksize = chunksize  
-            
+            #TODO to see again
+            self.num_of_chunks = int(n/chunksize)
         #compute p once for all
         self.p = self.d * self.k
         
@@ -342,7 +348,6 @@ class Graph:
         elbos = []
         times = []
         status = []
-        elbo = -np.inf
         
         #easy access to the tensorflow graph operations
         ops = self.in_graph
@@ -366,57 +371,41 @@ class Graph:
             for epoch in range(n_iter):
                 start_time = time.time()
                 
+                #feeding dict
+                d_computed = {}
+                
                 #compute new e, rho, beta
                 if self.file is None:
                     #using given X and Y
                     if X is not None and Y is not None:
-                        d_computed = {'X:0' : X, 'Y:0' : Y}
+                        d_computed['X:0'] = X
+                        d_computed['Y:0'] = Y
                     # or using X,Y already given to the graph
                     else:
                         if X is None:
                             assert self.X is not None
                         if Y is None:
                             assert self.Y is not None
-                        d_computed = {}
                     #note that e,rho and beta will in this case be computed at the same
                     # time as the ELBO
                 else:
-                    #streaming through a file
-                    #set computed e,rho,beta to 0
-                    sess.run(ops["init_globals"],**run_kwargs)
-                    #going through each chunk and update e,rho,beta
-                    d_computed = self.read_chunks(self.file,
-                                                  sess,
-                                                  run_kwargs = run_kwargs)
-                
-                #compute new elbo                  
-                new_elbo  = sess.run(ops["new_ELBO"],
-                                    feed_dict = d_computed,
-                                    **run_kwargs)
-                
-                #if new ELBO is not better
-                if new_elbo<=elbo:
-                    #decrease step size
-                    sess.run(ops["decrease_step_size"])
-                    status.append("not accepted")
-                    
-                #if ELBO is better
-                else:
-                    #update Σ,μ
-                    sess.run(ops["update_ops"],feed_dict = d_computed)
-                    elbo = new_elbo
-                    status.append("accepted")
-                    
-                #print status
-                print("{stat} : {elbo}".format(elbo=new_elbo,stat=status[-1]))
+                    #read chunks, and update global e, rho and beta in consequence
+                    self.read_chunks(self.file,
+                                     sess,
+                                     run_kwargs = run_kwargs)
+
+                #compute new elbo
+                statu, elbo = sess.run(ops["iteration"], feed_dict = d_computed)
                 
                 #save the current state
                 if keep_track:
                     mu, cov = sess.run([ops["mu"], ops["cov"]])
                     mus.append(mu)
                     covs.append(cov)
+                    
+                print('{statu}, with {elbo}'.format(statu = statu, elbo = elbo))
                 
-                elbos.append(elbo)
+                status.append(statu)
                 times.append(time.time()-start_time)
             
             #get the lasts mu, covs
@@ -438,9 +427,6 @@ class Graph:
         :type file: string
         :param sess: the current tensorflow session
         :type sess: tf.Session()
-        
-        :return: dictionnary containing the computed e, ρ and β
-        :rtype: dict
         """
         #create a pandas reader
         reader = pd.read_table(self.file, 
@@ -448,13 +434,9 @@ class Graph:
                                chunksize = self.chunksize)
         #for simplicity
         ops = self.in_graph
-    
-        #if chunk_as_sum is False, then we will keep track of each eᵢ, ρᵢ, βᵢ
-        # we then initialize empty lists
-        if not self.chunk_as_sum:
-            computed_e_ = np.empty((0,1),np.float32)
-            computed_rho_ = np.empty((0,self.p),np.float32)
-            computed_beta_ = np.empty((0,self.p,self.p),np.float32)
+        
+        if self.chunk_as_sum:
+            sess.run(ops["init_globals"],**run_kwargs)
         
         #start streaming
         for (i,chunk) in enumerate(reader):
@@ -471,17 +453,7 @@ class Graph:
                 sess.run(ops["update_globals"], feed_dict = d_, **run_kwargs)
             #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
             else:
-                to_compute = ["computed_e","computed_rho","computed_beta",
-                    "computed_e_prior","computed_rho_prior","computed_beta_prior"]
-                ce, cr, cb, cep, crp, cbp =\
-                    sess.run([ops[op] for op in to_compute],
-                             feed_dict = d_,
-                             **run_kwargs)
-                
-                computed_e_ = np.vstack((computed_e_,(ce + cep)))
-                computed_rho_ = np.vstack((computed_rho_,(cr + crp)))
-                computed_beta_ = np.vstack((computed_beta_,
-                                            np.expand_dims((cb + cbp),0)))
+                sess.run(ops["update_globals"][i], feed_dict = d_, **run_kwargs)
             #end of one chunk
             if not self.silent:
                 print("one chunk done")
@@ -489,13 +461,3 @@ class Graph:
             #if self.number_of_chunk_max had been set, see if we can continue
             if self.number_of_chunk_max != 0 and i>=self.number_of_chunk_max:
                 break
-        
-        #if chunk_as_sum, the e,ρ and β have already been computed
-        if self.chunk_as_sum:
-            d_computed = {}
-        #if not chunk_as_sum, we will feed our graph with the sum of our [eᵢ,ρᵢ,βᵢ]
-        else:
-            d_computed = {"global_e:0": np.sum(computed_e_, axis = 0),
-                        "global_rho:0": np.sum(computed_rho_, axis = 0),
-                        "global_beta:0": np.sum(computed_beta_, axis = 0)}
-        return d_computed
