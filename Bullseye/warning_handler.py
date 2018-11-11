@@ -10,6 +10,6 @@ def warn_useless_parameter(param1,param2,function):
     warn(msg.format(param1=param1,param2=param2,function=function))
 def warn_deprecated():
     warn("deprecated", DeprecationWarning)
-    
+
 def err_not_implemented():
     raise NotImplementedError
