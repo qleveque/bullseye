@@ -1,15 +1,15 @@
 """
     The ``predefined_functions`` module
     ======================
- 
+
     Contains all functions related to the computation of ϕ
     when computing the log-posterior ψ(θ) = ∑φᵢ(θ) = ∑ϕ(Aᵢθ).
- 
+
     :Example:
- 
+
     >>> import functions
     >>> phi_, grad_phi_, hess_phi_, A_ = get_predefined_functions("multilogit", A_opt = "mapfn")
- 
+
     Existing variants
     -----------------
 
@@ -19,11 +19,11 @@ import numpy as np
 import tensorflow as tf
 
 from .warning_handler import *
- 
+
 def Softmax_probabilities(A):
     """
     Compute the softmax probabilities of each a in A.
-    
+
     :param A: Score matrix.
     :type A: tf.tensor [n,k]
     :return: Softmax probabilities.
@@ -33,11 +33,11 @@ def Softmax_probabilities(A):
     sp = tf.exp(A - tf.expand_dims(tf.reduce_max(A, reduction_indices=[1]),1))
     sp = sp/tf.expand_dims(tf.reduce_sum(sp, reduction_indices=[1]),1)
     return sp
-    
+
 def softmax_probabilities(a):
     """
     Compute the softmax probabilities a.
-    
+
     :param a: Score vector.
     :type a: tf.tensor [k]
     :return: Softmax probabilities.
@@ -54,14 +54,14 @@ def softmax_probabilities(a):
     Core functions
 
     Refers to phi_*(), grad_phi_*() and hess_phi_*().
-    
+
     The definitions of respectively ϕ, ∇ϕ, Hϕ when expliciting
     the log posterior as ψ(θ) = ∑φᵢ(θ) = ∑ϕ(Aᵢθ).
-    
+
     * = "_[model](_[method])?"
     model ∈ {multilogit}
     opt ∈ {opt, der}
-    
+
     :param a: Activation vector
     :param y: Response
     (:param p: optimization parameter)
@@ -113,21 +113,21 @@ def hess_phi_multilogit_aut_diff(a,y):
     Core functions (Matrix form)
 
     Refers to Phi_*(), grad_Phi_*() and hess_Phi_*().
-    
+
     Matrix form of the core functions phi_*(), grad_phi_*() ans hess_phi_*().
     Corresponds to (ƒ(a,y) : (a,y)∈{A,Y}), for ƒ=phi_*(), grad_phi_*(), hess_phi_*().
-    
+
     * = "_[model](_[method])?"
     model ∈ {multilogit}
     method ∈ {mapfn, mapfn_opt}
-    
+
     :param A: Activation matrix
     :param Y: Response matrix
     :type A: tf.tensor [n,k]
     :type Y: tf.tensor [n,k]
     :return: ϕ(A) – ∇ϕ(A) – Hϕ(A)
     :rtype: tf.tensor [n] – [n,k] – [n,k,k]
-    
+
     .. note:: The operations used within these functions must be tensorflow
                 operations.
     .. warning:: Using these functions implies the use of map_fn which is
@@ -157,7 +157,7 @@ def hess_Phi_multilogit_aut_grad(A,Y):
     k = Y.get_shape().as_list()[-1]
     P=Softmax_probabilities(A)
     return tf.einsum('nk,kj->nkj',P,tf.eye(k)) - tf.einsum('ni,nj->nij',P,P)
-    
+
 #mapfn_opt
 def Phi_multilogit_mapfn_opt(A,Y):
     P=Softmax_probabilities(A)
@@ -184,12 +184,12 @@ def grad_Phi_multilogit_mapfn_aut_diff(A,Y):
     return tf.map_fn(lambda x: grad_phi_multilogit_aut_diff(x[0], x[1]), (A,Y), dtype=tf.float32)
 def hess_Phi_multilogit_mapfn_aut_diff(A,Y):
     return tf.map_fn(lambda x: hess_phi_multilogit_aut_diff(x[0], x[1]), (A,Y), dtype=tf.float32)
-    
+
 """
     Projection
-    
+
     Refers to proj_*()
-    
+
     When expliciting, the log posterior as ψ(θ) = ∑φᵢ(θ) = ∑ϕ(Aᵢθ), corresponds to Aᵢ for observation xᵢ.
 
     :param x: One observation of the data
@@ -211,9 +211,9 @@ def proj_multilogit(x, d, k):
 
 """
     Projection (matrix form)
-    
+
     Refers to Proj_*
-    
+
     The matrix form of the projections proj_*()
     Corresponds to (proj_*(xᵢ) : i∈〚1,n〛).
 
@@ -245,24 +245,24 @@ def get_predefined_functions(model, phi_option="", proj_option="", **kwargs):
     """
     m = globals().copy()
     m.update(locals())
-    
+
     s_Phi = "Phi_"+model
     s_grad_Phi = "grad_Phi_"+model
     s_hess_Phi = "hess_Phi_"+model
     s_A = "Proj_"+model
-    
+
     if phi_option!="":
         s_Phi += '_'+phi_option
         s_grad_Phi += '_'+phi_option
         s_hess_Phi += '_'+phi_option
     if proj_option!="":
         s_A += '_'+proj_option
-    
+
     f_names = [s_Phi, s_grad_Phi, s_hess_Phi, s_A]
     r_Phi, r_grad_Phi, r_hess_Phi, r_A = [m.get(f_name) for f_name in f_names]
-    
+
     f = [r_Phi, r_grad_Phi, r_hess_Phi, r_A]
-    
+
     for i in range(len(f)):
         if not f[i]:
              raise NotImplementedError("Method %s not implemented" % f_names[i])

@@ -19,6 +19,9 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 import os
+
+#remove tensorflow warning message at the beginning
+os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 import time
 
 from .graph import construct_bullseye_graph
@@ -102,7 +105,11 @@ class Graph:
                 #same as natural_param_likelihood for the prior
                 "natural_param_prior"       : False,
                 #make the run silent or not
-                "silent"                    : True
+                "silent"                    : True,
+                #when streaming through a file, use tensorflow dataset class
+                "tf_dataset"                : False,
+                #use einsum or dot_product
+                "use_einsum"                : True
                 }
         self.option_list = list(options)
         self.in_graph = None
@@ -198,7 +205,7 @@ class Graph:
             self.file = file
             self.chunksize = chunksize
             #TODO to see again
-            self.num_of_chunks = int(n/chunksize)
+            self.nb_of_chunks = int(n/chunksize)
         #compute p once for all
         self.p = self.d * self.k
 
@@ -358,15 +365,13 @@ class Graph:
         ops = self.in_graph
 
         #for timing
-        run_options = None
-        run_metadata = None
         runs_timeline = None
         run_kwargs = {}
         if timeline_path is not None:
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            run_metadata = tf.RunMetadata()
             self.runs_timeline = TimeLiner()
-            run_kwargs = {'options' : run_options, 'run_metadata' : run_metadata}
+            run_kwargs = {'options' : run_options,
+                          'run_metadata' : tf.RunMetadata()}
 
         #for profiler
         profiler = None
@@ -383,7 +388,7 @@ class Graph:
                 start_time = time.time()
 
                 #new_mu and new_cov
-                self.Run(sess, ops["update_new_parameters"], **run_kwargs)
+                self.run_operations(sess, ops["update_new_parameters"], **run_kwargs)
 
                 #feeding dict
                 d_computed = {}
@@ -406,7 +411,7 @@ class Graph:
                     # in consequence
                     self.set_globals_from_chunks(sess, run_kwargs = run_kwargs)
                 #compute new elbo
-                statu, elbo = self.Run(sess,ops["iteration"],
+                statu, elbo = self.run_operations(sess,ops["iteration"],
                                        feed_dict = d_computed,
                                        **run_kwargs)
                 #save the current state
@@ -426,7 +431,7 @@ class Graph:
 
             #save the run timeline
             if timeline_path is not None:
-                runs_timeline.save(timeline_path)
+                self.runs_timeline.save(timeline_path)
 
         #end of session and return
         return {"mus" : mus,
@@ -435,7 +440,7 @@ class Graph:
                 "times" : times,
                 "status" : status}
 
-    def Run(self, sess, ops_to_compute, feed_dict = {}, **run_kwargs):
+    def run_operations(self, sess, ops_to_compute, feed_dict = {}, **run_kwargs):
         #prepare profiler
         if self.profiler is not None:
             self.profiler.prepare_next_step()
@@ -443,14 +448,14 @@ class Graph:
         d = sess.run(ops_to_compute,feed_dict = feed_dict, **run_kwargs)
         #handle timeline
         if self.runs_timeline is not None:
-            self.runs_timeline.update_timeline(run_metadata)
+            self.runs_timeline.update_timeline(run_kwargs["run_metadata"])
         #handle profiler
         if self.profiler is not None:
             self.profiler.profile_operations()
 
         return d
 
-    def set_globals_from_chunks(file, sess, run_kwargs):
+    def set_globals_from_chunks(self, sess, run_kwargs):
         """
         update global_e, global_rho and global_beta while streaming through
          the file
@@ -460,37 +465,83 @@ class Graph:
         :param sess: the current tensorflow session
         :type sess: tf.Session()
         """
-        #create a pandas reader
-        reader = pd.read_table(self.file,
-                               sep = ",",
-                               chunksize = self.chunksize)
         #for simplicity
         ops = self.in_graph
 
         if self.chunk_as_sum:
-            self.Run(sess,ops["init_globals"],**run_kwargs)
+            self.run_operations(sess,ops["init_globals"],**run_kwargs)
 
-        #start streaming
-        for (i,chunk) in enumerate(reader):
-            #read data
-            data = np.asarray(chunk)
-            #transform them TODO to see again
-            X = data[:,1:]/253.
-            Y = to_one_hot(data[:,0])
-            #create the feeding dict
-            d_ = {"X:0" : X, "Y:0" : Y}
+        if not self.tf_dataset:
+            #create a pandas reader
+            reader = pd.read_table(self.file,
+                                   sep = ",",
+                                   chunksize = self.chunksize)
 
-            #add to e,ρ and β current eᵢ,ρᵢ and βᵢ
-            if self.chunk_as_sum:
-                self.Run(sess,ops["update_globals"], feed_dict = d_, **run_kwargs)
-            #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
-            else:
-                self.Run(sess,ops["update_globals"][i], feed_dict = d_, **run_kwargs)
+            #start streaming
+            for (i,chunk) in enumerate(reader):
+                #read data
+                data = np.asarray(chunk)
+                #transform them TODO to see again
+                X = data[:,1:]/253.
+                Y = to_one_hot(data[:,0])
+                #create the feeding dict
+                d_ = {"X:0" : X, "Y:0" : Y}
 
-            #end of one chunk
-            if not self.silent:
-                print("one chunk done")
+                #add to e,ρ and β current eᵢ,ρᵢ and βᵢ
+                if self.chunk_as_sum:
+                    self.run_operations(sess,ops["update_globals"], feed_dict = d_, **run_kwargs)
+                #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
+                else:
+                    self.run_operations(sess,ops["update_globals"][i], feed_dict = d_, **run_kwargs)
 
-            #if self.number_of_chunk_max had been set, see if we can continue
-            if self.number_of_chunk_max != 0 and i>=self.number_of_chunk_max:
-                break
+                #end of one chunk
+                if not self.silent:
+                    print("one chunk done")
+
+                #if self.number_of_chunk_max had been set, see if we can continue
+                if self.number_of_chunk_max != 0 and i>=self.number_of_chunk_max - 1:
+                    break
+
+        else: #self.tf_dataset
+            i = 0
+            try:
+                while True:
+                    if self.chunk_as_sum:
+                        self.run_operations(sess,[ops["X"],ops["Y"],ops["update_globals"]], **run_kwargs)
+                    #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
+                    else:
+                        self.run_operations(sess,[ops["X"],ops["Y"],ops["update_globals"][i]], **run_kwargs)
+                    print("one chunk done : {}".format(i))
+                    i +=1
+                    if self.number_of_chunk_max != 0 and i>=self.number_of_chunk_max:
+                        break
+            except tf.errors.OutOfRangeError:
+                pass
+
+    def run_test(self, n_iter = 10, X = None, Y = None,
+        keep_track=False, timeline_path=None, profiler_dir=None):
+
+        #initialize lists  to return
+        X_s = []
+        ops = self.in_graph
+        #start the session
+        with tf.Session(graph = self.graph) as sess:
+            #initialize the graph
+            sess.run(ops["init"])
+            sess.run(ops["iterator"].initializer)
+            i = 0
+            try:
+                while True:
+                    if self.chunk_as_sum:
+                        X = self.run_operations(sess, ops["X"])
+                        X_s.append(X)
+                        np.savetxt("X{}".format(i),X)
+                        i+=1
+                    #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
+                    else:
+                        self.run_operations(sess,ops["update_globals"][i], **run_kwargs)
+            except tf.errors.OutOfRangeError:
+                print("one chunk done : {}".format(i))
+
+        #end of session and return
+        return {"X_s" : X_s}

@@ -15,6 +15,7 @@ import re
 
 from .sampling import *
 from .graph_aux import *
+from .utils import *
 
 """
 GRAPH
@@ -35,8 +36,20 @@ def construct_bullseye_graph(G):
 
     #X, Y related
     if G.X is None and G.Y is None:
-        X = tf.placeholder(tf.float32, name='X', shape = [None, d])
-        Y = tf.placeholder(tf.float32, name='Y', shape = [None, k])
+        if not G.tf_dataset:
+            X = tf.placeholder(tf.float32, name='X', shape = [None, d])
+            Y = tf.placeholder(tf.float32, name='Y', shape = [None, k])
+        else:
+            filenames = [G.file]
+            record_defaults = [tf.float32] * (d+1)
+            dataset = tf.data.experimental.CsvDataset(filenames, record_defaults)
+            batched_dataset = dataset.batch(G.chunksize)
+            iterator = batched_dataset.make_initializable_iterator()
+
+            it_next = iterator.get_next()
+            X = tf.transpose(tf.convert_to_tensor(it_next[1:(d+1)]))
+            Y = tf.one_hot(tf.cast(tf.transpose(it_next[0]),'int32'), k)
+
     else:
         X = tf.get_variable("X", G.X.shape,initializer = tic(G.X),dtype = tf.float32)
         Y = tf.get_variable("Y",G.Y.shape,initializer = tic(G.Y),dtype = tf.float32)
@@ -200,7 +213,6 @@ def construct_bullseye_graph(G):
             update_global_beta = tf.assign(global_beta,
                                         global_beta + computed_beta + computed_beta_prior)
 
-            init_globals = tf.variables_initializer([global_e, global_rho, global_beta])
 
         #chunk as list : the sum will be computed outside of the graph
         else:
@@ -232,14 +244,20 @@ def construct_bullseye_graph(G):
                 update_global_rho.append(tf.assign(global_rho[_], computed_rho + computed_rho_prior))
                 update_global_beta.append(tf.assign(global_beta[_], computed_beta + computed_beta_prior))
 
-            init_globals = tf.no_op
         #chunk
         tf.identity(update_global_e, name = "update_global_e")
         tf.identity(update_global_rho, name = "update_global_rho")
         tf.identity(update_global_beta, name = "update_global_beta")
 
-        update_globals = [update_global_e, update_global_rho, update_global_beta]
+        global_list = []
+        if G.tf_dataset:
+            global_list += [iterator]
+        if not G.chunk_as_sum:
+            global_list += [global_e, global_rho, global_beta]
 
+        init_globals = tf.variables_initializer(global_list)
+
+        update_globals = [update_global_e, update_global_rho, update_global_beta]
     #if not streaming through a file, they will not be used
     else:
         global_e, global_rho, global_beta, update_globals, init_globals = 5*[tf.no_op()]

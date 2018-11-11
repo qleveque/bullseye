@@ -47,22 +47,18 @@ def activated_functions_mapfn(A,Y,Phi,grad_Phi,hess_Phi):
 COMPUTE LOCAL COV
 """
 
-def compute_local_std_lazy(A_array, new_cov, array_is_kernel):
-    #compute local_cov
-    if array_is_kernel: #A_array is a kernel : A_array_kernel
-        local_cov = tf.einsum('npkql,pq->nkl', A_array, new_cov) #[n,k,k]
+def compute_local_std_trick(A_array, new_cov_sqrt, use_einsum = False):
+    if use_einsum:
+        #þ
+        local_std = tf.einsum('pq,nqk->npk', new_cov_sqrt, A_array,
+                               name = 'einsum_std_trick')
     else:
-        local_cov = tf.einsum('npk,pq,nql->nkl', A_array, new_cov, A_array) #[n,k,k]
+        local_std = tf.transpose(tf.tensordot(new_cov_sqrt,
+                                    A_array,
+                                    [[1],[1]],
+                                    name = "tensordot_std_trick"),
+                                    [1,0,2])
 
-    #compute the square_root : local_std
-    #TODO to see again, is this true ?
-    s_cov, u_cov, v_cov = tf.linalg.svd(local_cov)
-    s_cov_sqrt = tf.linalg.diag(tf.sqrt(s_cov))
-    local_std = tf.matmul(u_cov, tf.matmul(s_cov_sqrt, v_cov, adjoint_b=True))
-    return local_std
-
-def compute_local_std_trick(A_array, new_cov_sqrt):
-    local_std = tf.einsum('pq,nqk->npk', new_cov_sqrt, A_array)
     return local_std
 
 """
@@ -78,16 +74,24 @@ def likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt,z,z_weights):
         A_array_kernel = tf.einsum('npk,nqj->npkqj', A_array, A_array,
                                     name = "As_kernel")
 
-    local_mu = tf.einsum('iba,b->ia',A_array, new_mu) #[n,k]
+    local_mu = tf.einsum('iba,b->ia',A_array, new_mu,
+                          name = 'einsum_local_mu') #[n,k]
 
     if G.local_std_trick:
-        local_std = compute_local_std_trick(A_array, new_cov_sqrt) #[n,p,k]
+        local_std = compute_local_std_trick(A_array, new_cov_sqrt,
+                                            use_einsum = G.use_einsum) #[n,p,k]
     else:
-        A_to_use = A_array_kernel if G.compute_kernel else A_array
-        local_std = compute_local_std_lazy(A_to_use, new_cov, G.compute_kernel) #[n,k,k]
+        if G.compute_kernel: #A_array is a kernel : A_array_kernel
+            local_cov = tf.einsum('npkql,pq->nkl', A_array_kernel, new_cov,
+                                 name = 'einsum_lazy_kernel_local_cov') #[n,k,k]
+        else:
+            local_cov = tf.einsum('npk,pq,nql->nkl', A_array, new_cov, A_array,
+                                 name = 'einsum_lazy_local_cov') #[n,k,k]
+        local_std = matrix_sqrt(local_cov)
 
     activations = tf.expand_dims(local_mu,0)\
-                + tf.einsum('npk,sp->snk', local_std,z) #[s,n,k]
+                + tf.einsum('npk,sp->snk', local_std,z,
+                            name = 'einsum_in_activations') #[s,n,k]
 
     activated_functions = activated_functions_flatten if G.flatten_activations\
                             else activated_functions_mapfn
@@ -99,15 +103,20 @@ def likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt,z,z_weights):
     local_B = tf.einsum('s,snkj->nkj',z_weights, hess_phi) #[n,k,k] = [s]×[s,n,k,k]
 
     computed_e_l = tf.reduce_sum(local_e, name="computed_e_l") #[]
-    computed_rho_l  = tf.einsum('npk,nk->p', A_array, local_r) #[p]=[n,p,k]×[n,k]
+    computed_rho_l  = tf.einsum('npk,nk->p', A_array, local_r,
+                        name = 'computed_rho_l') #[p]=[n,p,k]×[n,k]
 
     if G.compute_kernel:
         #[p,p]=[n,p,k,p,k]×[n,p,k]
-        computed_beta = tf.einsum('npkqj,nkj->pq',A_array_kernel, local_B)
+        computed_beta = tf.einsum('npkqj,nkj->pq',A_array_kernel, local_B,
+                                  name = 'einsum_likelihood_compute_kernel')
     else:
         #computed_beta = tf.einsum('ijk,ikl,iml->jm', A_array, local_B, A_array)
-        computed_beta_aux = tf.einsum('ijk,ikl->ijl', A_array, local_B)
-        computed_beta = tf.einsum('ijl,iml->jm',computed_beta_aux, A_array)
+        #
+        computed_beta_aux = tf.einsum('ijk,ikl->ijl', A_array, local_B,
+                                      name = 'computed_beta_aux')
+        computed_beta = tf.einsum('ijl,iml->jm',computed_beta_aux, A_array,
+                                 name = 'computed_beta')
 
     if not G.natural_param_likelihood:
         computed_e,computed_rho = \
