@@ -11,5 +11,9 @@ def warn_useless_parameter(param1,param2,function):
 def warn_deprecated():
     warn("deprecated", DeprecationWarning)
 
+def warn_removing_dir(dirname):
+    msg = """{dirname} already exsists. Removing it..."""
+    warn(msg.format(dirname=dirname))
+    
 def err_not_implemented():
     raise NotImplementedError

@@ -28,7 +28,7 @@ from .graph import construct_bullseye_graph
 from .predefined_functions import get_predefined_functions
 from .utils import *
 from .warning_handler import *
-from .profilers import TimeLiner, Profiler
+from .profilers import TimeLiner, Profiler, RunSaver
 
 """
     The ``Bullseye`` class
@@ -53,7 +53,7 @@ class Graph:
             #functions
             "Phi","grad_Phi","hess_Phi","Projs",
             #run
-            "runs_timeline", "profiler"
+            "saver"
             ]
 
         #listing of all option attributes and their default values
@@ -108,7 +108,8 @@ class Graph:
                 "silent"                    : True,
                 #when streaming through a file, use tensorflow dataset class
                 "tf_dataset"                : False,
-                #use einsum or dot_product
+                #/!\ IN CONSTRUCTION /!\
+                #use einsum or dot_product when multiplying big matrices
                 "use_einsum"                : True
                 }
         self.option_list = list(options)
@@ -334,8 +335,8 @@ class Graph:
         #remember this method is called, to prevent errors
         self.build_is_called = True
 
-    def run(self, n_iter = 10, X = None, Y = None,
-            keep_track=False, timeline_path=None, profiler_dir=None):
+    def run(self, n_iter = 10, run_id = None, X = None, Y = None,
+            keep_track=False, timeline=False, profiler=False):
         """
         run the implicit tensorflow graph.
 
@@ -351,32 +352,37 @@ class Graph:
         :return: μ's, Σ's, ELBOs, and times of each iteration
         :rtype: dict
         """
+
+        if run_id is None:
+            run_id = time.strftime("%Y_%m_%d_%H_%M_%S", time.gmtime())
         #to prevent error, ensures the graph is already built
         assert self.build_is_called
 
-        #initialize lists  to return
-        mus = []
-        covs = []
-        elbos = []
-        times = []
-        status = []
+        #feeding dict
+        d_computed = {}
+
+        #handle data in argument
+        if self.file is None:
+            #using given X and Y
+            if X is not None:
+                d_computed['X:0'] = X
+            else:
+                assert self.X is not None
+            if Y is not None:
+                d_computed['Y:0'] = Y
+            else:
+                assert self.Y is not None
+            #note that e,rho and beta will in this case be computed
+            # at the same time as the ELBO
 
         #easy access to the tensorflow graph operations
         ops = self.in_graph
 
-        #for timing
-        runs_timeline = None
+        #run arguments
         run_kwargs = {}
-        if timeline_path is not None:
-            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            self.runs_timeline = TimeLiner()
-            run_kwargs = {'options' : run_options,
-                          'run_metadata' : tf.RunMetadata()}
 
-        #for profiler
-        profiler = None
-        if profiler_dir is not None:
-            self.profiler = Profiler(profiler_dir)
+        #for saving
+        self.saver = RunSaver(run_id, timeline, profiler, run_kwargs)
 
         #start the session
         with tf.Session(graph = self.graph) as sess:
@@ -385,74 +391,43 @@ class Graph:
 
             #starting iterations
             for epoch in range(n_iter):
-                start_time = time.time()
+                self.saver.start_epoch()
 
                 #new_mu and new_cov
                 self.run_operations(sess, ops["update_new_parameters"], **run_kwargs)
-
-                #feeding dict
-                d_computed = {}
-
-                #compute new e, rho, beta
-                if self.file is None:
-                    #using given X and Y
-                    if X is not None:
-                        d_computed['X:0'] = X
-                    else:
-                        assert self.X is not None
-                    if Y is not None:
-                        d_computed['Y:0'] = Y
-                    else:
-                        assert self.Y is not None
-                    #note that e,rho and beta will in this case be computed
-                    # at the same time as the ELBO
-                else:
+                
+                if self.file is not None:
                     #read chunks, and update global e, rho and beta
                     # in consequence
-                    self.set_globals_from_chunks(sess, run_kwargs = run_kwargs)
+                    self.set_globals_from_chunks(sess, run_kwargs=run_kwargs)
+
                 #compute new elbo
-                statu, elbo = self.run_operations(sess,ops["iteration"],
-                                       feed_dict = d_computed,
-                                       **run_kwargs)
+                statu, elbo, best_elbo = self.run_operations(sess,ops["iteration"],
+                                       feed_dict = d_computed, **run_kwargs)
+                statu, elbo, best_elbo = [statu.decode('utf-8'),str(elbo),str(best_elbo)]
+                #save key values
+                self.saver.finish_epoch(statu, elbo, best_elbo)
+
                 #save the current state
                 if keep_track:
                     mu, cov = sess.run([ops["mu"], ops["cov"]])
-                    mus.append(mu)
-                    covs.append(cov)
+                    self.saver.save_step(mu,cov,epoch)
 
                 print('{statu}, with {elbo}'.format(statu = statu, elbo = elbo))
 
-                status.append(statu)
-                times.append(time.time()-start_time)
-
-            #get the lasts mu, covs
-            if not keep_track:
-                mus, covs = sess.run([ops["mu"], ops["cov"]])
-
-            #save the run timeline
-            if timeline_path is not None:
-                self.runs_timeline.save(timeline_path)
+            #get the lasts mu, cov, elbo
+            
+            final_mu, final_cov = sess.run([ops["mu"], ops["cov"]])
+            #save
+            self.saver.save_final_results(mu=final_mu, cov=final_cov)
 
         #end of session and return
-        return {"mus" : mus,
-                "covs" : covs,
-                "elbos" : elbos,
-                "times" : times,
-                "status" : status}
+        return ""
 
     def run_operations(self, sess, ops_to_compute, feed_dict = {}, **run_kwargs):
-        #prepare profiler
-        if self.profiler is not None:
-            self.profiler.prepare_next_step()
-        #run
+        self.saver.before_run()
         d = sess.run(ops_to_compute,feed_dict = feed_dict, **run_kwargs)
-        #handle timeline
-        if self.runs_timeline is not None:
-            self.runs_timeline.update_timeline(run_kwargs["run_metadata"])
-        #handle profiler
-        if self.profiler is not None:
-            self.profiler.profile_operations()
-
+        self.saver.after_run(run_kwargs)
         return d
 
     def set_globals_from_chunks(self, sess, run_kwargs):
@@ -497,51 +472,6 @@ class Graph:
                 #end of one chunk
                 if not self.silent:
                     print("one chunk done")
-
                 #if self.number_of_chunk_max had been set, see if we can continue
                 if self.number_of_chunk_max != 0 and i>=self.number_of_chunk_max - 1:
                     break
-
-        else: #self.tf_dataset
-            i = 0
-            try:
-                while True:
-                    if self.chunk_as_sum:
-                        self.run_operations(sess,[ops["X"],ops["Y"],ops["update_globals"]], **run_kwargs)
-                    #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
-                    else:
-                        self.run_operations(sess,[ops["X"],ops["Y"],ops["update_globals"][i]], **run_kwargs)
-                    print("one chunk done : {}".format(i))
-                    i +=1
-                    if self.number_of_chunk_max != 0 and i>=self.number_of_chunk_max:
-                        break
-            except tf.errors.OutOfRangeError:
-                pass
-
-    def run_test(self, n_iter = 10, X = None, Y = None,
-        keep_track=False, timeline_path=None, profiler_dir=None):
-
-        #initialize lists  to return
-        X_s = []
-        ops = self.in_graph
-        #start the session
-        with tf.Session(graph = self.graph) as sess:
-            #initialize the graph
-            sess.run(ops["init"])
-            sess.run(ops["iterator"].initializer)
-            i = 0
-            try:
-                while True:
-                    if self.chunk_as_sum:
-                        X = self.run_operations(sess, ops["X"])
-                        X_s.append(X)
-                        np.savetxt("X{}".format(i),X)
-                        i+=1
-                    #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
-                    else:
-                        self.run_operations(sess,ops["update_globals"][i], **run_kwargs)
-            except tf.errors.OutOfRangeError:
-                print("one chunk done : {}".format(i))
-
-        #end of session and return
-        return {"X_s" : X_s}
