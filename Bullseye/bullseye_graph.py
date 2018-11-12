@@ -51,9 +51,7 @@ class Graph:
             #init
             "mu_0","cov_0",
             #functions
-            "Phi","grad_Phi","hess_Phi","Projs",
-            #run
-            "saver"
+            "Phi","grad_Phi","hess_Phi","Projs"
             ]
 
         #listing of all option attributes and their default values
@@ -382,7 +380,7 @@ class Graph:
         run_kwargs = {}
 
         #for saving
-        self.saver = RunSaver(run_id, timeline, profiler, run_kwargs)
+        self.saver = RunSaver(self, run_id, timeline, profiler, run_kwargs)
 
         #start the session
         with tf.Session(graph = self.graph) as sess:

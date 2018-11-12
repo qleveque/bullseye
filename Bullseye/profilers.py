@@ -59,7 +59,7 @@ class Profiler:
         self.pctx.profiler.profile_operations(options=self.opts)
 
 class RunSaver():
-    def __init__(self, run_id, timeline, profiler, run_kwargs):
+    def __init__(self, G, run_id, timeline, profiler, run_kwargs):
         data_dir = "bullseye_data"
         run_dir = os.path.join(data_dir, run_id)
         
@@ -88,6 +88,18 @@ class RunSaver():
         self.profiler = None
         if profiler:
             self.profiler = Profiler(run_dir)
+            
+        self.save_config(G)
+        
+    def save_config(self, G):
+        config = {}
+        for option in G.option_list:
+            config[option]=getattr(G,option)
+            
+        config_path = os.path.join(self.run_dir,"config.json")
+        with open(config_path, "w", encoding = 'utf-8') as f:
+            json.dump(config, f)
+        
 
     def start_epoch(self):
         self.start_time = time.time()
@@ -121,7 +133,6 @@ class RunSaver():
             file = os.path.join(self.run_dir, 'timeliner.json')
             self.runs_timeline.save(file)
         
-
 
     def save_values(self, mu, cov, dirname, **infos):
         dir_to_save = os.path.join(self.run_dir, dirname)
