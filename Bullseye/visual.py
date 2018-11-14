@@ -1,12 +1,27 @@
-width = 50
+from .utils import *
+width = 79 - 20
 
 def print_title(title):
-    msg = "\n========{title:=<{width}}========"
-    print(msg.format(title=" "+title.upper()+" ",width=width))
-def print_subtitle(subtitle):
-    msg = "--------{title:-<{width}}--------"
-    print(msg.format(title=" "+subtitle+" ",width=width))
+    c = '='
+    msg = "{col}"+c*10+"{title:{c}<{width}}"+c*10+"{ecol}"
+    print(msg.format(title=" "+title.upper()+" ",
+                     c=c,
+                     width=width,
+                     col=bcolors.BOLD,
+                     ecol=bcolors.ENDC))
 
-if __name__ == "__main__":
-    print_title("test")
-    print_subtitle("test")
+def print_subtitle(subtitle):
+    c = '.'
+    msg = c*10+"{title:{c}<{width}}"+c*10
+    print(msg.format(title=" "+subtitle+" ",
+                     c=c,
+                     width=width))
+    
+def print_end(subtitle):
+    c = '-'
+    msg = "{col}"+c*10+"{title:{c}<{width}}"+c*10+"{ecol}"
+    print(msg.format(title=" "+subtitle+" ",
+                     width=width,
+                     c=c,
+                     col=bcolors.BOLD,
+                     ecol=bcolors.ENDC))

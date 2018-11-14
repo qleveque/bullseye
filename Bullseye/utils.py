@@ -7,6 +7,11 @@
 
 import numpy as np
 import struct
+import sys
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 def partition_list(l, n):
     for i in range(0, len(l), n):
@@ -103,3 +108,28 @@ def matrix_sqrt(A):
     s_sqrt = tf.linalg.diag(tf.sqrt(s))
     r = tf.matmul(u, tf.matmul(s_sqrt, v, adjoint_b=True))
     return r
+
+if sys.platform not in ['win32', 'Windows']:
+    class bcolors:
+        HEADER = '\033[95m'
+        OKBLUE = '\033[94m'
+        OKGREEN = '\033[92m'
+        WARNING = '\033[93m'
+        FAIL = '\033[91m'
+        ENDC = '\033[0m'
+        BOLD = '\033[1m'
+        UNDERLINE = '\033[4m'
+else:
+    class bcolors:
+        HEADER = ''
+        OKBLUE = ''
+        OKGREEN = ''
+        WARNING = ''
+        FAIL = ''
+        ENDC = ''
+        BOLD = ''
+        UNDERLINE = ''
+
+class NullIO(StringIO):
+    def write(self, txt):
+       pass
