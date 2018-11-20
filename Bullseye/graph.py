@@ -2,11 +2,10 @@
     The ``graph`` module
     ======================
 
-    Contains all functions related to the creation of the Bullseye tensorflow graph.
-
-    :Example:
-    >>> graph, operations = construct_bullseye_graph(G)
+    Contains the ``construct_bullseye_graph`` function which creates the
+    implicit tensorflow graph.
 """
+#→ may try to document this better
 
 import tensorflow as tf
 from tensorflow.initializers import constant as tic
@@ -17,17 +16,30 @@ from .sampling import *
 from .graph_aux import *
 from .utils import *
 
-"""
-GRAPH
-"""
 def construct_bullseye_graph(G):
+    """
+    Creates the implicit tensorflow graph given a Bullseye.Graph.
+    This function is used in ``Graph.build``.
+
+    Parameters
+    ----------
+    G : Bullseye.Graph
+        Graph from which the tensorflow graph will be built.
+
+    Returns
+    -------
+    graph : tf.graph
+        The constructed tensorflow graph.
+    ops_dict : dict
+        A dictionnary containing the important variables and operations of the
+        graph
+    """
     #set the graph
     tf.reset_default_graph()
     graph = tf.get_default_graph()
 
     #for simplicity
     d,k,p = [G.d, G.k, G.p]
-    Phi, grad_Phi, hess_Phi, Projs = [G.Phi, G.grad_Phi, G.hess_Phi, G.Projs]
     dim_samp = p if G.local_std_trick else k
 
     """
@@ -42,7 +54,7 @@ def construct_bullseye_graph(G):
         else:
             filenames = [G.file]
             record_defaults = [tf.float32] * (d+1)
-            dataset = tf.data.experimental.CsvDataset(filenames, record_defaults)
+            dataset = tf.data.experimental.CsvDataset(filenames,record_defaults)
             batched_dataset = dataset.batch(G.chunksize)
             iterator = batched_dataset.make_initializable_iterator()
 
@@ -51,8 +63,10 @@ def construct_bullseye_graph(G):
             Y = tf.one_hot(tf.cast(tf.transpose(it_next[0]),'int32'), k)
 
     else:
-        X = tf.get_variable("X", G.X.shape,initializer = tic(G.X),dtype = tf.float32)
-        Y = tf.get_variable("Y",G.Y.shape,initializer = tic(G.Y),dtype = tf.float32)
+        X = tf.get_variable("X", G.X.shape,initializer = tic(G.X),
+                            dtype = tf.float32)
+        Y = tf.get_variable("Y",G.Y.shape,initializer = tic(G.Y),
+                            dtype = tf.float32)
 
     #prior_std related
     if G.keep_1d_prior:
@@ -72,34 +86,31 @@ def construct_bullseye_graph(G):
 
 
     #status
-    status = tf.get_variable("status",[], initializer = tf.zeros_initializer, dtype = tf.string)
+    status = tf.get_variable("status",[], initializer = tf.zeros_initializer,
+                            dtype = tf.string)
 
     #μ, Σ and ELBO related
-    mu = tf.get_variable("mu",[p],initializer = tic(G.mu_0),dtype = tf.float32)
-    cov  = tf.get_variable("cov",[p,p],initializer = tic(G.cov_0),dtype = tf.float32)
-    ELBO = tf.get_variable("elbo",[],initializer = tic(-np.infty),dtype = tf.float32)
+    mu = tf.get_variable("mu",[p],initializer = tic(G.mu_0),
+                        dtype = tf.float32)
+    cov  = tf.get_variable("cov",[p,p],initializer = tic(G.cov_0),
+                        dtype = tf.float32)
+    ELBO = tf.get_variable("elbo",[],initializer = tic(-np.infty),
+                        dtype = tf.float32)
 
     #e, ρ and β related
-    e = tf.get_variable("e",[],initializer = tf.zeros_initializer,dtype = tf.float32)
-    rho = tf.get_variable("rho",
-                          [p],
-                          initializer = tf.zeros_initializer,
+    e = tf.get_variable("e",[],initializer = tf.zeros_initializer,
+                        dtype = tf.float32)
+    rho = tf.get_variable("rho",[p], initializer = tf.zeros_initializer,
                           dtype = tf.float32)
-    beta = tf.get_variable("beta",
-                           [p,p],
+    beta = tf.get_variable("beta", [p,p],
                            initializer = tic(np.linalg.inv(G.cov_0)),
                            dtype = tf.float32)
 
     #step size
-    step_size = tf.get_variable("step_size",
-                                [],
-                                initializer = tic(G.speed),
+    step_size = tf.get_variable("step_size", [], initializer = tic(G.speed),
                                 dtype = tf.float32)
 
     #new_cov, new_mu
-    new_cov_ = tf.linalg.inv(step_size * beta + (1-step_size) * tf.linalg.inv(cov))
-    new_mu_  = mu - step_size * tf.einsum('ij,j->i', new_cov_, rho)
-
     new_cov = tf.get_variable("new_cov",[p,p],
                               initializer = tf.zeros_initializer,
                               dtype = tf.float32)
@@ -107,6 +118,23 @@ def construct_bullseye_graph(G):
                               initializer = tf.zeros_initializer,
                               dtype = tf.float32)
 
+    assert G.backtracking_degree in [-1,1,2]
+
+    #backtracking
+    if G.backtracking_degree==-1:
+        new_cov_=tf.linalg.inv(step_size * beta +\
+                               (1-step_size) * tf.linalg.inv(cov))
+    elif G.backtracking_degree==1:
+        new_cov_ = step_size*(tf.linalg.inv(beta)) + (1-step_size) * cov
+    elif G.backtracking_degree==2:
+        #→ to see again, new_cov_sqrt should not be updated here, but not sure
+        #requires to compute sqrt of beta
+        #step_size*(tf.linalg.inv(beta)) + (1-step_size) * new_cov_sqrt
+        err("backtracking_degree==2")
+        return ""
+
+
+    new_mu_  = mu - step_size * tf.einsum('ij,j->i', new_cov_, rho)
 
     update_new_cov = tf.assign(new_cov, new_cov_)
     update_new_mu = tf.assign(new_mu, new_mu_)
@@ -114,8 +142,8 @@ def construct_bullseye_graph(G):
     #SVD decomposition of new_cov
     new_cov_S_, new_cov_U, new_cov_V = tf.linalg.svd(new_cov)
     new_cov_S_sqrt = tf.linalg.diag(tf.sqrt(new_cov_S_))
-    new_cov_sqrt_ = tf.matmul(new_cov_U,
-                             tf.matmul(new_cov_S_sqrt,new_cov_V, adjoint_b=True)) #[p,p]
+    new_cov_sqrt_ = new_cov_U @\
+                    tf.matmul(new_cov_S_sqrt,new_cov_V, adjoint_b=True) #[p,p]
     new_cov_S = tf.get_variable("new_cov_S", [p],
                                 initializer = tf.zeros_initializer,
                                 dtype=tf.float32)
@@ -127,7 +155,8 @@ def construct_bullseye_graph(G):
     update_new_cov_sqrt = tf.assign(new_cov_sqrt, new_cov_sqrt_)
 
     if G.local_std_trick:
-        update_new_parameters = [update_new_cov, update_new_mu, update_new_cov_S, update_new_cov_sqrt]
+        update_new_parameters = [update_new_cov, update_new_mu,
+                                update_new_cov_S, update_new_cov_sqrt]
     else:
         update_new_parameters = [update_new_cov, update_new_mu]
     #sampling related
@@ -170,7 +199,7 @@ def construct_bullseye_graph(G):
 
     #PRIO TRIPLET
     #for readability
-    ptargs = [new_mu,new_cov,z_prior,z_weights_prior]
+    ptargs = [new_mu,new_cov,new_cov_sqrt,z_prior,z_weights_prior]
     #if not batched
     if not G.m_prior>0:
         computed_e_prior, computed_rho_prior, computed_beta_prior =\
@@ -192,26 +221,26 @@ def construct_bullseye_graph(G):
         #if streaming through a file as sum
         if G.chunk_as_sum:
             global_e = tf.get_variable("global_e",
-                                        [],
-                                        initializer = tf.zeros_initializer,
-                                        dtype = tf.float32)
+                                    [],
+                                    initializer = tf.zeros_initializer,
+                                    dtype = tf.float32)
             global_rho = tf.get_variable("global_rho",
-                                        [p],
-                                        initializer = tf.zeros_initializer,
-                                        dtype = tf.float32)
+                                    [p],
+                                    initializer = tf.zeros_initializer,
+                                    dtype = tf.float32)
             global_beta = tf.get_variable("global_beta",
-                                        [p,p],
-                                        initializer = tic(np.linalg.inv(G.cov_0)),
-                                        dtype = tf.float32)
+                                    [p,p],
+                                    initializer = tic(np.linalg.inv(G.cov_0)),
+                                    dtype = tf.float32)
 
-            #chunk as sum, will increase step by step global_e, global_rho and global_beta
-            # with update_globals
+            #chunk as sum, will increase step by step global_e, global_rho and
+            #global_beta with update_globals
             update_global_e = tf.assign(global_e,
-                                        global_e + computed_e + computed_e_prior)
+                        global_e + computed_e + computed_e_prior)
             update_global_rho = tf.assign(global_rho,
-                                        global_rho + computed_rho + computed_rho_prior)
+                        global_rho + computed_rho + computed_rho_prior)
             update_global_beta = tf.assign(global_beta,
-                                        global_beta + computed_beta + computed_beta_prior)
+                        global_beta + computed_beta + computed_beta_prior)
 
 
         #chunk as list : the sum will be computed outside of the graph
@@ -227,22 +256,22 @@ def construct_bullseye_graph(G):
             width = len(str(G.num_of_chunks))
             for _ in range(G.num_of_chunks):
                 idx = "chunk_{_:0>{width}}".format(_=_, width=width)
-                global_e.append(tf.get_variable("global_e_"+idx,
-                                                [],
-                                                initializer = tf.zeros_initializer,
-                                                dtype = tf.float32))
-                global_rho.append(tf.get_variable("global_rho_"+idx,
-                                        [p],
+                global_e.append(tf.get_variable("global_e_"+idx, [],
                                         initializer = tf.zeros_initializer,
                                         dtype = tf.float32))
-                global_beta.append(tf.get_variable("global_beta_"+idx,
-                                        [p,p],
-                                        initializer = tic(np.linalg.inv(G.cov_0)),
+                global_rho.append(tf.get_variable("global_rho_"+idx, [p],
+                                        initializer = tf.zeros_initializer,
+                                        dtype = tf.float32))
+                global_beta.append(tf.get_variable("global_beta_"+idx, [p,p],
+                                        initializer=tic(np.linalg.inv(G.cov_0)),
                                         dtype = tf.float32))
 
-                update_global_e.append(tf.assign(global_e[_], computed_e + computed_e_prior))
-                update_global_rho.append(tf.assign(global_rho[_], computed_rho + computed_rho_prior))
-                update_global_beta.append(tf.assign(global_beta[_], computed_beta + computed_beta_prior))
+                update_global_e.append(tf.assign(global_e[_],
+                                        computed_e + computed_e_prior))
+                update_global_rho.append(tf.assign(global_rho[_],
+                                        computed_rho + computed_rho_prior))
+                update_global_beta.append(tf.assign(global_beta[_],
+                                        computed_beta + computed_beta_prior))
 
         #chunk
         tf.identity(update_global_e, name = "update_global_e")
@@ -257,10 +286,11 @@ def construct_bullseye_graph(G):
 
         init_globals = tf.variables_initializer(global_list)
 
-        update_globals = [update_global_e, update_global_rho, update_global_beta]
+        update_globals=[update_global_e, update_global_rho, update_global_beta]
     #if not streaming through a file, they will not be used
     else:
-        global_e, global_rho, global_beta, update_globals, init_globals = 5*[tf.no_op()]
+        global_e, global_rho, global_beta = 3*[tf.no_op()]
+        update_globals, init_globals = 2*[tf.no_op()]
 
 
     """
@@ -307,7 +337,7 @@ def construct_bullseye_graph(G):
         update_cov  = tf.assign(cov, new_cov, name = "update_cov")
         update_mu = tf.assign(mu, new_mu, name = "update_mu")
         update_ELBO = tf.assign(ELBO, new_ELBO, name = "update_ELBO")
-        update_step_size = tf.assign(step_size, G.speed, name = "update_step_size")
+        update_step_size=tf.assign(step_size, G.speed, name="update_step_size")
         status_to_accepted = tf.assign(status, "accepted")
 
         with tf.control_dependencies([update_e, update_rho, update_beta,
@@ -319,7 +349,8 @@ def construct_bullseye_graph(G):
     REFUSED UPDATE
     """
     def refused_update():
-        decrease_step_size = tf.assign(step_size, step_size*G.step_size_decrease_coef)
+        decrease_step_size = tf.assign(step_size,
+                                step_size*G.step_size_decrease_coef)
         status_to_refused = tf.assign(status, "refused")
         with tf.control_dependencies([decrease_step_size]):
             return [tf.assign(status, "refused"), new_ELBO, ELBO]

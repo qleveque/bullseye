@@ -1,3 +1,7 @@
+"""
+__init__
+"""
+
 from .bullseye_graph import Graph
 from .utils import *
 from .Tests import *
