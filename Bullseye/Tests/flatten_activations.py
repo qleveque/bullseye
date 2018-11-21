@@ -38,8 +38,8 @@ def flatten_activations(recompute = False):
             bull.build()
             
             for _ in range(n_loops):
-                print_subtitle('run n°{}'.format(_))
-                d = bull.run(n_iter = n_iter)
+                run_id = '{method} run {n}'.format(method=method,n=_)
+                d = bull.run(n_iter = n_iter, run_id = run_id)
                 df_ = pd.DataFrame({'method' : n_iter*[method], 'times' : d["times"], 'status': d["status"]})
                 df = df.append(df_)
                 

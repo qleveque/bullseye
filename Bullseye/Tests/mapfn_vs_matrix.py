@@ -36,7 +36,6 @@ def mapfn_vs_matrix(recompute = False):
         num_of_loops = 10
         
         for option in options:
-            print_title(option.name)
             bull = Bullseye.Graph()
             bull.feed_with(x_array,y_array)
             bull.set_model("multilogit",
@@ -46,9 +45,11 @@ def mapfn_vs_matrix(recompute = False):
             bull.build()
             
             for _ in range(num_of_loops):
-                print_subtitle('run n°{}'.format(_))
-                d = bull.run(n_iter)
-                df_ = pd.DataFrame({'method' : n_iter*[option.name], 'times' : d["times"], 'status': d["status"]})
+                run_id = '{o} run {n}'.format(o = option.name, n =_)
+                d = bull.run(n_iter = n_iter, run_id = run_id)
+                df_ = pd.DataFrame({'method' : n_iter*[option.name],
+                                    'times' : d["times"],
+                                    'status': d["status"]})
                 df = df.append(df_)
         
         with open(result_filename, "w", encoding = 'utf-8') as f:

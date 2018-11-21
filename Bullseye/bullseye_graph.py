@@ -22,6 +22,7 @@ from .profilers import RunSaver
 from .utils import *
 from .warning_handler import *
 from .visual import *
+from .graph_aux import *
 
 #remove tensorflow warning message at the beginning
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
@@ -171,8 +172,9 @@ class Graph:
         self.build_is_called = False
 
     def feed_with(self, X = None, Y = None, d = None, k = None, prior_std = 1,
-        file = None, chunksize = None, number_of_chunk_max = None):
+        file = None, chunksize = None, number_of_chunk_max = None, p = None):
         """
+        →p
         Feed the graph with data. There are multiple ways of doing so.
         In all the cases, it requires prior_std.
 
@@ -264,7 +266,10 @@ class Graph:
                 self.nb_of_chunks = math.ceil(n/chunksize)
 
         #compute p once for all
-        self.p = self.d * self.k
+        if p is None:
+            self.p = self.d * self.k
+        else :
+            self.p = p
 
         #handle std_prior
         #depending on the form of the given std_prior, transform it into a p×p
@@ -328,7 +333,8 @@ class Graph:
 
     def set_model(self,
         Psi = None, grad_Psi = None, hess_Psi = None,
-        Phi = None, grad_Phi = None, hess_Phi = None, Proj = None):
+        Phi = None, grad_Phi = None, hess_Phi = None, Proj = None,
+        p = None):
         """
         Specify to the graph a given model.
         There are multiple ways of doing so.
@@ -349,6 +355,7 @@ class Graph:
 
         #method 1
         if Psi is not None:
+            self.use_projs = False
             #ψ
             self.Psi = Psi
             #∇ψ
@@ -358,11 +365,12 @@ class Graph:
                 self.grad_Psi = grad_Psi
             #Hψ
             if hess_Psi is None:
-                self.grad_Psi = (lambda x,y,t: auto_hess_Psi(self.Psi,x,y,t))
+                self.hess_Psi = (lambda x,y,t: auto_hess_Psi(self.Psi,x,y,t))
             else:
-                self.grad_Psi = grad_Psi
+                self.hess_Psi = grad_Psi
         #method 2
         else:
+            self.use_projs = True
             assert Phi is not None
             assert Projs is not None
             #ϕ
@@ -483,7 +491,7 @@ class Graph:
         Returns
         ------
         dict
-            μ, Σ and ELBO in a dictionnary
+            μ, Σ, ELBO and statistics in a dictionnary
         """
 
         #to prevent errors, ensures the graph is already built
@@ -568,7 +576,8 @@ class Graph:
 
         print_end("end of the run")
 
-        return {'mu':final_mu, 'cov':final_cov,'elbo':final_elbo}
+        return {'mu':final_mu, 'cov':final_cov,'elbo':final_elbo,
+                **self.saver.final_stats()}
 
     def __run(self, sess, ops_to_compute, feed_dict={}, **run_kwargs):
         """

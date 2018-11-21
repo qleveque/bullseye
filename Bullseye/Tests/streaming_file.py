@@ -27,7 +27,6 @@ def streaming_file(recompute = False):
         methods = ["np_data", "streaming"]
         
         for method in methods:
-            print_title(method)
             bull = Bullseye.Graph()
             
             if method=="np_data":
@@ -35,14 +34,16 @@ def streaming_file(recompute = False):
             else:
                 bull.feed_with(file=csv_filename, chunksize = 400, k = k)
                 
-            bull.set_model("multilogit")
+            bull.set_predefined_model("multilogit")
             bull.init_with(mu_0 = 0, cov_0 = 1)
             bull.build()
             
             for _ in range(n_loops):
-                print_subtitle('run n°{}'.format(_))
-                d = bull.run(n_iter = n_iter)
-                df_ = pd.DataFrame({'method' : n_iter*[method], 'times' : d["times"], 'status': d["status"]})
+                run_id = '{method} run n°{n}'.format(n=_, method=method)
+                d = bull.run(n_iter = n_iter, run_id = run_id)
+                df_ = pd.DataFrame({'method' : n_iter*[method],
+                                    'times' : d["times"],
+                                    'status': d["status"]})
                 df = df.append(df_)
                 
         with open(result_filename, "w", encoding = 'utf-8') as f:

@@ -22,8 +22,10 @@ The public function that may be used are
 import numpy as np
 import tensorflow as tf
 import inspect
+import math
 import re
 
+from .utils import *
 from .warning_handler import *
 
 """
@@ -215,9 +217,13 @@ or
         Hψ(θ)
 """
 
+"""
+MULTILOGIT
+"""
+
 def Psi_multilogit_std(X,Y,theta):
     """
-    φ(X,Y,θ) = ∑ᵢ (∑ⱼ Yⱼexp(θⱼ·xᵢ))/(∑ⱼ exp(θⱼ·xᵢ))
+    ψ(X,Y,θ) = ∑ᵢ (∑ⱼ Yⱼexp(θⱼ·xᵢ))/(∑ⱼ exp(θⱼ·xᵢ))
     We first compute Aᵢⱼ=θⱼ·xᵢ then reuse Phi_multilogit which
     computes ∑ᵢ (∑ⱼ Yⱼexp(Aᵢⱼ))/(∑ⱼ exp(Aᵢⱼ))
     """
@@ -228,12 +234,100 @@ def Psi_multilogit_std(X,Y,theta):
     return tf.reduce_sum(Phi_multilogit_std(A,Y), axis=0)
 
 def grad_Psi_multilogit_std(X,Y,theta):
-    return tf.gradients(Psi_multilogit_std(X,Y,theta),theta)[0]
+    return auto_grad_Psi(Psi_multilogit_std(X,Y,theta))
 
 def hess_Psi_multilogit_std(X,Y,theta):
-    #→
-    J = grad_Psi_multilogit_std(X,Y,theta)
-    return tf.tensordot(J, J, axes=0)
+    return auto_hess_Psi(Psi_multilogit_std(X,Y,theta))
+
+"""
+CNN
+"""
+
+def Psi_CNN_std(X,Y,theta):
+    #size of the sample
+    n = tf.shape(X)[0]
+    #image width/height
+    c = int(math.sqrt(X.shape.as_list()[1]))
+
+    #reshape X into multiple squared arrays
+    X_reshaped = tf.reshape(X, [n,c,c])
+
+    #add channel layer
+    image = tf.expand_dims(X_reshaped,3)
+    k = Y.shape.as_list()[1]
+
+    #list of convolution sizes and pool sizes
+    conv_sizes = [3,3]
+    pools = [2,2]
+    #size of the final flatten list
+    flatten_size = int(c/np.prod(pools))**2
+
+    #split theta accordingly to the convolution filters
+    how_to_split_theta = []
+    for i in range(len(conv_sizes)):
+        how_to_split_theta += [conv_sizes[i]**2, 1]
+
+    #for final logistic regression
+    how_to_split_theta += [flatten_size*k, k]
+
+    #finally split theta
+    theta_splits = tf.split(theta, how_to_split_theta)
+
+    for i in range(len(conv_sizes)):
+        #retrieve current W and b
+        W = theta_splits[2*i]
+        b = theta_splits[2*i + 1]
+
+        #apply the convolutions and the max pools
+        image = apply_conv(image,W,b)
+        image = apply_max_pool(image,pools[i])
+
+    #flatten
+    flat = tf.layers.Flatten()(image) # of size [n, flatten_size]
+
+    #log multilogit on what remains and as we compute the log,
+    # we don't use exp
+    W = tf.reshape(theta_splits[-2],[flatten_size,k])
+    b = theta_splits[-1]
+    #compute scores
+    Scores = tf.expand_dims(b,0) + flat@W
+
+    #for a given Score :
+    #   -∑ᵢ (Score[yᵢ] - n ∑ⱼ Score[j])
+    psi = - tf.reduce_sum(
+                tf.einsum('ik,ik->i', Scores, Y) \
+                - tf.reduce_sum(Scores, axis = 1)
+                )
+    return psi
+
+def apply_conv(X,W,b):
+    w = int(math.sqrt(W.shape.as_list()[0]))
+    #add in_channel, out_channel
+    W_ = tf.expand_dims(tf.expand_dims(tf.reshape(W, [w,w]),2),2)
+
+    X_conv = tf.nn.conv2d(
+        input = X,
+        filter = W_,
+        strides = [1,1,1,1],
+        padding = "SAME"
+        )
+    return X_conv
+
+def apply_max_pool(X, pool_size):
+    X_pooled = tf.layers.max_pooling2d(
+        #[batch, height, width, channels]
+        inputs = X,
+        pool_size = pool_size,
+        strides = pool_size, #→
+        padding='valid'
+        )
+    return X_pooled
+
+def grad_Psi_CNN_std(X,Y,theta):
+    return auto_grad_Psi(Psi_CNN_std,X,Y,theta)
+
+def hess_Psi_CNN_std(X,Y,theta):
+    return auto_hess_Psi(Psi_CNN_std,X,Y,theta)
 
 phi_suffixes = ["phi_","grad_phi_","hess_phi_"]
 phi_docstring = """

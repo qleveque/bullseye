@@ -291,6 +291,16 @@ class RunSaver():
         if self.runs_timeline is not None:
             self.runs_timeline.update_timeline(kwargs["run_metadata"])
 
+    def final_stats(self):
+        """
+        Is called at the end of the run. Return simple statistics.
+        """
+        stats = ["status","elbos","times","best_elbos"]
+        r = {}
+        for stat in stats:
+            r[stat] = getattr(self,stat)
+        return r
+
 class TimeLiner:
     """
     The ``TimeLiner`` class
