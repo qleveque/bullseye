@@ -84,7 +84,7 @@ class Graph:
             #φ's, ψ's and projections related
             "Psi","grad_Psi","hess_Psi",
             "Phi","grad_Phi","hess_Phi","Proj",
-            "use_projs"
+            "use_projs",
             #saver related
             "saver"
             ]
@@ -315,14 +315,14 @@ class Graph:
                 suffix_proj+= "_"+proj_option
 
             #get the Phis
-            Phi_, grad_Phi_, hess_Phi_ = Phis[suffix_phi]
+            Phi_, grad_Phi_, hess_Phi_ = predefined_Phis[suffix_phi]
             #consider specific_parameters
             Phi = lambda A,Y : Phi_(A,Y,**specific_parameters)
             grad_Phi = lambda A,Y : grad_Phi_(A,Y,**specific_parameters)
             hess_Phi = lambda A,Y : hess_Phi_(A,Y,**specific_parameters)
 
             #get proj
-            Proj = Projs[suffix_proj]
+            Proj = predefined_Projs[suffix_proj]
 
             #use other method
             self.set_model(Phi=Phi, grad_Phi=grad_Phi, hess_Phi=hess_Phi,
@@ -404,7 +404,7 @@ class Graph:
         else:
             self.use_projs = True
             assert Phi is not None
-            assert Projs is not None
+            assert Proj is not None
             #ϕ
             self.Phi = Phi
             #∇ϕ
@@ -549,7 +549,8 @@ class Graph:
         if run_id is None:
             run_id = time.strftime("%Y_%m_%d_%H_%M_%S", time.gmtime())
         else:
-            if not re.match("^[\\w]+$", run_id):
+            print(run_id)
+            if not re.match("^[\\w ]+$", run_id):
                 err_bad_name(run_id)
 
         #feeding dict that will be used
@@ -621,8 +622,11 @@ class Graph:
 
         print_end("end of the run")
 
-        return {'mu':final_mu, 'cov':final_cov,'elbo':final_elbo,
-                **self.saver.final_stats()}
+        r =  {'mu':final_mu, 'cov':final_cov,'elbo':final_elbo}
+
+        if self.saver is not None:
+            r.update(self.saver.final_stats())
+        return r
 
     def __run(self, sess, ops_to_compute, feed_dict={}, **run_kwargs):
         """
