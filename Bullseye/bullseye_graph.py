@@ -16,8 +16,8 @@ import time
 import math
 
 from .graph import construct_bullseye_graph
-from .predefined_functions import get_predefined_phis, get_predefined_projs,\
-    get_predefined_psis
+from .predefined_functions import compute_ps,\
+    predefined_Phis, predefined_Psis, predefined_Projs
 from .profilers import RunSaver
 from .utils import *
 from .warning_handler import *
@@ -171,12 +171,10 @@ class Graph:
         self.init_with_is_called = False
         self.build_is_called = False
 
-    def feed_with(self, X = None, Y = None, d = None, k = None, prior_std = 1,
-        file = None, chunksize = None, number_of_chunk_max = None, p = None):
+    def feed_with(self, X = None, Y = None, d = None, k = None,
+        file = None, chunksize = None, number_of_chunk_max = None):
         """
-        →p
         Feed the graph with data. There are multiple ways of doing so.
-        In all the cases, it requires prior_std.
 
         Method 1: requires X and Y
             Feed with a design matrix X and a response matrix Y.
@@ -265,31 +263,16 @@ class Graph:
             else:
                 self.nb_of_chunks = math.ceil(n/chunksize)
 
-        #compute p once for all
-        if p is None:
-            self.p = self.d * self.k
-        else :
-            self.p = p
-
-        #handle std_prior
-        #depending on the form of the given std_prior, transform it into a p×p
-        #matrix.
-        if type(prior_std) == int:
-            self.prior_std = prior_std * np.eye(self.p)
-        elif len(list(prior_std.shape)) == 1:
-            assert list(prior_std.shape)==[self.p]
-            self.prior_std = np.diag(prior_std)
-        else:
-            assert list(prior_std.shape) == [self.p, self.p]
-            self.prior_std = prior_std
-
         #remember this method is called to ensure consistency and prevent errors
         self.feed_with_is_called = True
 
     def set_predefined_model(self, model,
-        phi_option="std", proj_option="std", psi_option="std",
-        use_projections = True):
+        phi_option=None, proj_option=None, psi_option=None,
+        prior_std = 1,
+        use_projections = True,
+        **specific_parameters):
         """
+        →specific_parameters
         Make use of the ``predefined_functions`` module.
         Specify to the graph a given model. There are multiple ways of doing so.
         →
@@ -317,34 +300,81 @@ class Graph:
         #keep that in mind
         self.use_projs = use_projections
 
+        #compute p
+        p = compute_ps[model](self.d, self.k, **specific_parameters)
         #method 1
         if use_projections:
-            self.Phi, self.grad_Phi, self.hess_Phi =\
-                get_predefined_phis(model, option = phi_option)
-            self.Proj = get_predefined_projs(model, option = proj_option)
+            #basic suffix specifying the model
+            suffix_phi = model
+            suffix_proj = model
+
+            #second suffix specifying the model options
+            if phi_option is not None:
+                suffix_phi += "_"+phi_option
+            if proj_option is not None:
+                suffix_proj+= "_"+proj_option
+
+            #get the Phis
+            Phi_, grad_Phi_, hess_Phi_ = Phis[suffix_phi]
+            #consider specific_parameters
+            Phi = lambda A,Y : Phi_(A,Y,**specific_parameters)
+            grad_Phi = lambda A,Y : grad_Phi_(A,Y,**specific_parameters)
+            hess_Phi = lambda A,Y : hess_Phi_(A,Y,**specific_parameters)
+
+            #get proj
+            Proj = Projs[suffix_proj]
+
+            #use other method
+            self.set_model(Phi=Phi, grad_Phi=grad_Phi, hess_Phi=hess_Phi,
+                Proj=Proj, p=p)
 
         #method 2
         else:
-            self.Psi, self.grad_Psi, self.hess_Psi =\
-                get_predefined_psis(model, option = psi_option)
+            #basic suffix specifying the model
+            suffix_psi = model
 
-        #remember this method is called, to prevent errors
-        self.set_model_is_called = True
+            #second suffix specifying the model options
+            if psi_option is not None:
+                suffix_psi += "_"+psi_option
+
+            #get the Phis
+            Psi_, grad_Psi_, hess_Psi_ = \
+                predefined_Psis[suffix_psi]
+
+            #be sure that the Psi function is not None
+            assert Psi_ is not None
+
+            #initialize Psi functions
+            grad_Psi = None
+            hess_Psi = None
+
+            #consider specific_parameters
+            Psi = lambda X,Y,theta : Psi_(X,Y,theta,**specific_parameters)
+            if grad_Psi_ is not None:
+                grad_Psi = lambda X,Y,theta : \
+                        grad_Psi_(X,Y,theta,**specific_parameters)
+            if hess_Psi_ is not None:
+                hess_Psi = lambda X,Y,theta : \
+                        hess_Psi_(X,Y,theta,**specific_parameters)
+
+            #use other method
+            self.set_model(Psi=Psi, grad_Psi=grad_Psi, hess_Psi=hess_Psi, p=p)
 
     def set_model(self,
         Psi = None, grad_Psi = None, hess_Psi = None,
         Phi = None, grad_Phi = None, hess_Phi = None, Proj = None,
+        prior_std = 1,
         p = None):
         """
         Specify to the graph a given model.
         There are multiple ways of doing so.
 
-        Method 1: requires Psi
+        Method 1: requires Psi and p
             Manually choose the function ψ. You can also specify ∇ψ and Hψ,
             if not, ∇ψ and Hψ will be automatically computed using tf methods.
             The given functions take as parameters an a design matrix X, a
             response matrix Y, and the parameter θ.
-        Method 2: requires Phi and Projs
+        Method 2: requires Phi, Proj and p
             Manually choose the function φ. You can also specify ∇φ and Hφ,
             if not, ∇φ and Hφ will be automatically computed using tf methods.
             The given functions take as parameters an activation matrix and Y.
@@ -352,6 +382,8 @@ class Graph:
         The operations used within these functions must be tensorflow
         operations.
         """
+        #set p
+        self.p = p
 
         #method 1
         if Psi is not None:
@@ -389,8 +421,21 @@ class Graph:
             #A
             self.Proj = Proj
 
+        #handle std_prior
+        #depending on the form of the given std_prior, transform it into a p×p
+        #matrix.
+        if type(prior_std) == int:
+            self.prior_std = prior_std * np.eye(self.p)
+        elif len(list(prior_std.shape)) == 1:
+            assert list(prior_std.shape)==[self.p]
+            self.prior_std = np.diag(prior_std)
+        else:
+            assert list(prior_std.shape) == [self.p, self.p]
+            self.prior_std = prior_std
+
         #remember this method is called, to prevent errors
         self.set_model_is_called = True
+
 
     def init_with(self, mu_0 = 0, cov_0 = 1):
         """

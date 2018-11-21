@@ -134,27 +134,3 @@ else:
 class NullIO(StringIO):
     def write(self, txt):
        pass
-
-"""
-AUTO GRAD AND HESS
-"""
-def auto_grad_Psi(Psi,X,Y,theta):
-    #→
-    return tf.gradients(Psi(X,Y,theta),theta)[0]
-
-def auto_hess_Psi(Psi,X,Y,theta):
-    #→
-    J = auto_grad_Psi(Psi,X,Y,theta)
-    return hess_from_grad(J)
-
-def auto_grad_Phi(Phi,A,Y):
-    #→
-    return tf.gradients(Phi(A,Y),theta)[0]
-
-def auto_hess_Phi(Phi,A,Y):
-    #→
-    J = auto_grad_Psi(Phi,A,Y)
-    return hess_from_grad(J)
-
-def hess_from_grad(grad):
-    return tf.tensordot(grad,grad,axes=0)
