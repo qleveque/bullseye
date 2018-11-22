@@ -343,7 +343,8 @@ def construct_bullseye_graph(G):
         with tf.control_dependencies([update_e, update_rho, update_beta,
                                      update_cov, update_mu, update_ELBO,
                                      update_step_size]):
-            return [tf.assign(status, "accepted"), new_ELBO, ELBO]
+            return [tf.assign(status, bcolors.OKGREEN+"accepted"+bcolors.ENDC),
+                new_ELBO, ELBO]
 
     """
     REFUSED UPDATE
@@ -351,9 +352,10 @@ def construct_bullseye_graph(G):
     def refused_update():
         decrease_step_size = tf.assign(step_size,
                                 step_size*G.step_size_decrease_coef)
-        status_to_refused = tf.assign(status, "refused")
+        #status_to_refused = tf.assign(status, "refused")
         with tf.control_dependencies([decrease_step_size]):
-            return [tf.assign(status, "refused"), new_ELBO, ELBO]
+            return [tf.assign(status, bcolors.FAIL+"refused"+bcolors.ENDC),
+                new_ELBO, ELBO]
 
     """
     ITERATIONS

@@ -6,8 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 import Bullseye
-from Bullseye import generate_multilogit
-from Bullseye.visual import *
+from .utils import *
 
 cwd = os.path.dirname(os.path.realpath(__file__))
 csv_filename = os.path.join(cwd,"data","streaming_file.csv")
@@ -17,7 +16,7 @@ def streaming_file(recompute = False):
     if recompute:
         k=10
         theta_0, x_array, y_array =\
-            generate_multilogit(d = 10, n = 10**4, k = k, file = csv_filename)
+            Bullseye.generate_multilogit(d = 10, n = 10**4, k = k, file = csv_filename)
         
         df = pd.DataFrame(columns=["method","times","status"])
         
@@ -34,12 +33,12 @@ def streaming_file(recompute = False):
             else:
                 bull.feed_with(file=csv_filename, chunksize = 400, k = k)
                 
-            bull.set_predefined_model("multilogit")
+            bull.set_predefined_model("multilogit", use_projections = False)
             bull.init_with(mu_0 = 0, cov_0 = 1)
             bull.build()
             
             for _ in range(n_loops):
-                run_id = '{method} run n°{n}'.format(n=_, method=method)
+                run_id = '{method} run {n}'.format(n=_, method=method)
                 d = bull.run(n_iter = n_iter, run_id = run_id)
                 df_ = pd.DataFrame({'method' : n_iter*[method],
                                     'times' : d["times"],
@@ -53,6 +52,6 @@ def streaming_file(recompute = False):
         df = pd.read_csv(result_filename)
         sns.boxplot(x="method", y="times",data=df)
         plt.title('Study of the efficiency of file streaming')
-        plt.show()
+        handle_fig("streaming_file")
     else:
         raise FileNotFoundError

@@ -6,15 +6,15 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 import Bullseye
-from Bullseye import generate_multilogit
-from Bullseye.visual import *
+from .utils import *
 
 cwd = os.path.dirname(os.path.realpath(__file__))
 result_filename = os.path.join(cwd,"data","flatten_activations.data")
 
 def flatten_activations(recompute = False):
     if recompute:
-        theta_0, x_array, y_array = generate_multilogit(d = 10, n = 10**4, k = 10)
+        theta_0, x_array, y_array = \
+                Bullseye.generate_multilogit(d = 10, n = 10**4, k = 10)
         
         df = pd.DataFrame(columns=["method","times","status"])
         
@@ -24,10 +24,10 @@ def flatten_activations(recompute = False):
         methods = ["flattening_act", "mapfn_act"]
         
         for method in methods:
-            print_title(method)
             bull = Bullseye.Graph()
             bull.feed_with(X = x_array, Y = y_array)
-            bull.set_model("multilogit")
+            bull.set_predefined_model("multilogit",
+                                     use_projections = True)
             bull.init_with(mu_0 = 0, cov_0 = 1)
             
             if method == "falttening_act":
@@ -50,6 +50,6 @@ def flatten_activations(recompute = False):
         df = pd.read_csv(result_filename)
         sns.boxplot(x="method", y="times",data=df)
         plt.title('Study of the interest of flattening activations')
-        plt.show()
+        handle_fig("flatten_activations")
     else:
         raise FileNotFoundError

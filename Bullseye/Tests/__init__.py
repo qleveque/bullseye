@@ -1,5 +1,9 @@
+import os
 import matplotlib
 matplotlib.use('Agg')
+#matplotlib.use('TkAgg')
+
+from .utils import *
 
 from .simple_test import simple_test
 

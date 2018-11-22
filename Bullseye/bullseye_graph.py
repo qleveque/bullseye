@@ -570,9 +570,8 @@ class Graph:
                 assert self.Y is not None
 
         #for saving
-        if save:
-            self.saver = RunSaver(self, run_id, run_kwargs, self.timeliner,
-                            self.profiler, self.keep_track)
+        self.saver = RunSaver(self, run_id, run_kwargs, self.timeliner,
+                        self.profiler, self.keep_track)
 
         print_title('beginning run "{}"'.format(run_id))
 
@@ -585,8 +584,7 @@ class Graph:
             for epoch in range(n_iter):
                 print_subtitle("epoch number {}".format(epoch))
                 #---->start epoch
-                if self.saver is not None:
-                    self.saver.start_epoch()
+                self.saver.start_epoch()
 
                 #compute new_mu, new_cov and optionaly more
                 self.__run(sess, ops["update_new_parameters"],
@@ -604,11 +602,10 @@ class Graph:
                 statu = statu.decode('utf-8')
 
                 #---->finish epoch
-                if self.saver is not None:
-                    self.saver.finish_epoch(statu, elbo, best_elbo)
-                    if self.saver.keep_track:
-                        mu, cov = sess.run([ops["mu"], ops["cov"]])
-                        self.saver.save_step(mu,cov,epoch)
+                self.saver.finish_epoch(statu, elbo, best_elbo)
+                if self.saver.keep_track:
+                    mu, cov = sess.run([ops["mu"], ops["cov"]])
+                    self.saver.save_step(mu,cov,epoch)
 
                 print('{statu}, with {elbo}'.format(statu = statu, elbo = elbo))
 
@@ -617,15 +614,14 @@ class Graph:
                 sess.run([ops["mu"], ops["cov"], ops["ELBO"]])
 
             #save
-            if self.saver is not None:
+            if save:
                 self.saver.save_final_results(mu=final_mu, cov=final_cov)
 
         print_end("end of the run")
 
+        #set the return dictionnary
         r =  {'mu':final_mu, 'cov':final_cov,'elbo':final_elbo}
-
-        if self.saver is not None:
-            r.update(self.saver.final_stats())
+        r.update(self.saver.final_stats())
         return r
 
     def __run(self, sess, ops_to_compute, feed_dict={}, **run_kwargs):

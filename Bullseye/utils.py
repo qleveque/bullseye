@@ -71,7 +71,10 @@ def generate_multilogit(d,n,k, file = None):
     return theta_0, x_array.astype(np.float32), y_array.astype(np.float32)
 
 def cartesian_coord(*arrays):
-    #source : https://stackoverflow.com/questions/1208118/using-numpy-to-build-an-array-of-all-combinations-of-two-arrays
+    """
+    source : https://stackoverflow.com/questions/1208118/using-numpy-to-build-a\
+    n-array-of-all-combinations-of-two-arrays
+    """
     grid = np.meshgrid(*arrays)
     coord_list = [entry.ravel() for entry in grid]
     points = np.vstack(coord_list).T
@@ -94,15 +97,22 @@ def from_one_hot(y):
 def sublist(a, b):
     return set(a) <= set(b)
 
+"""
 def decode_csv(line):
    parsed_line = tf.decode_csv(line, record_defaults)
-   label =  parsed_line[-1]      # label is the last element of the list
-   del parsed_line[-1]           # delete the last element from the list
-   del parsed_line[0]            # even delete the first element bcz it is assumed NOT to be a feature
-   features = tf.stack(parsed_line)  # Stack features so that you can later vectorize forward prop., etc.
-   #label = tf.stack(label)          #NOT needed. Only if more than 1 column makes the label...
+   label =  parsed_line[-1]
+   # label is the last element of the list
+   del parsed_line[-1]
+   # delete the last element from the list
+   del parsed_line[0]
+   # even delete the first element bcz it is assumed NOT to be a feature
+   features = tf.stack(parsed_line)
+   # Stack features so that you can later vectorize forward prop., etc.
+   #label = tf.stack(label)
+   #NOT needed. Only if more than 1 column makes the label...
    batch_to_return = features, label
    return batch_to_return
+"""
 
 def matrix_sqrt(A):
     s, u, v = tf.linalg.svd(A)

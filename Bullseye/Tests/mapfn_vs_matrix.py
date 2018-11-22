@@ -1,6 +1,7 @@
 import time
 import os
 import pandas as pd
+from .utils import *
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -38,9 +39,10 @@ def mapfn_vs_matrix(recompute = False):
         for option in options:
             bull = Bullseye.Graph()
             bull.feed_with(x_array,y_array)
-            bull.set_model("multilogit",
+            bull.set_predefined_model("multilogit",
                            phi_option = option.phi_option,
-                           proj_option = option.proj_option)
+                           proj_option = option.proj_option,
+                           use_projections = True)
             bull.init_with(mu_0 = 0, cov_0 = 1)
             bull.build()
             
@@ -59,6 +61,6 @@ def mapfn_vs_matrix(recompute = False):
         df = pd.read_csv(result_filename)
         sns.boxplot(x="method", y="times",data=df)
         plt.title('Comparison of different calculation approaches')
-        plt.show()
+        handle_fig("mapfn_vs_matrix")
     else:
         raise FileNotFoundError
