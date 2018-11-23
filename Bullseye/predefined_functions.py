@@ -39,8 +39,12 @@ compute_p functions
 
 def compute_p_multilogit(d,k):
     return d*k
-
 compute_ps["multilogit"] = compute_p_multilogit
+
+def compute_p_LM(d,k):
+    assert k == 1
+    return d+1
+compute_ps["LM"] = compute_p_LM
 
 def compute_p_CNN(d, k, conv_sizes, pools):
     n_for_conv = sum([conv_size**2 + 1 for conv_size in conv_sizes])
@@ -48,7 +52,6 @@ def compute_p_CNN(d, k, conv_sizes, pools):
     flatten_size = int(c/np.prod(pools))**2
     n_for_multilogit = flatten_size * k + k
     return n_for_conv + n_for_multilogit
-
 compute_ps["CNN"] = compute_p_CNN
 
 #===============================================================================
@@ -82,13 +85,9 @@ or
         Hψ(θ)
 """
 
-"""
-MULTILOGIT
-"""
-
 def Psi_multilogit(X,Y,theta):
     """
-    ψ(X,Y,θ) = ∑ᵢ (∑ⱼ Yⱼexp(θⱼ·xᵢ))/(∑ⱼ exp(θⱼ·xᵢ))
+    ψ(X,Y,θ) = - log[ ∑ᵢ (∑ⱼ Yⱼexp(θⱼ·xᵢ))/(∑ⱼ exp(θⱼ·xᵢ)) ]
     We first compute Aᵢⱼ=θⱼ·xᵢ then reuse Phi_multilogit which
     computes ∑ᵢ (∑ⱼ Yⱼexp(Aᵢⱼ))/(∑ⱼ exp(Aᵢⱼ))
     """
@@ -97,12 +96,25 @@ def Psi_multilogit(X,Y,theta):
     theta_matrix = tf.reshape(theta, [d,k])
     A = tf.matmul(X,theta_matrix)
     return tf.reduce_sum(Phi_multilogit(A,Y), axis=0)
-
 predefined_Psis["multilogit"] = [Psi_multilogit, None, None]
 
-"""
-CNN
-"""
+def Psi_LM(X,Y,theta):
+    """
+    ψ(X,Y,Θ) = ψ(X,Y,β,σ²) = -0.5·n·[log(2π) + σ²] - 0.5 * 1/σ² ∑ᵢ(Yᵢ-Xᵢβ)²
+    """
+    #size of the sample
+    n = tf.cast(tf.shape(X)[0],tf.float32)
+    d = X.shape.as_list()[1]
+    #split θ into β and σ
+    beta, sigma_squared = tf.split(theta, [d,1])
+    #e
+    e = tf.square(tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,beta))
+
+    #compute the log likelihood
+    log_likelihood = -0.5*n*(tf.log(2*math.pi)+tf.log(sigma_squared)) \
+                - 0.5 * 1/sigma_squared * tf.reduce_sum(e)
+    return -tf.squeeze(log_likelihood)
+predefined_Psis["LM"]=[Psi_LM, None, None]
 
 def Psi_CNN(X,Y,theta,conv_sizes,pools):
     #size of the sample
@@ -150,14 +162,9 @@ def Psi_CNN(X,Y,theta,conv_sizes,pools):
     #compute scores
     Scores = tf.expand_dims(b,0) + flat@W
 
-    #for a given Score :
-    #   -∑ᵢ (Score[yᵢ] - n ∑ⱼ Score[j])
-    psi = - tf.reduce_sum(
-                tf.einsum('ik,ik->i', Scores, Y) \
-                - tf.reduce_sum(Scores, axis = 1)
-                )
-    return psi
-
+    #compute probabilities from Scores
+    P=Softmax_probabilities(Scores)
+    return -tf.reduce_sum(tf.log(tf.einsum('nk,nk->n',Y,P)),0)
 predefined_Psis["CNN"] = [Psi_CNN, None, None]
 
 #===============================================================================

@@ -153,7 +153,9 @@ class Graph:
                 #include results of each epochs in saved informations
                 "keep_track"                : False,
                 #backtracking degree
-                "backtracking_degree"       : -1
+                "backtracking_degree"       : -1,
+                #if need to transform the vector into one_hot when reading files
+                "to_one_hot"                : False
                 }
 
         #keep in mind the name of those options
@@ -235,15 +237,12 @@ class Graph:
         #method 3
         else:
             assert os.path.isfile(file)
-            if chunksize is not None:
-                assert type(chunksize)==int
             assert k is not None
             assert type(k) == int
 
             #retrieve the parameters
             self.k = k
             self.file = file
-            self.chunksize = chunksize
 
             #deduce d
             #→ not a perfect method to assert d
@@ -257,11 +256,17 @@ class Graph:
             #→ not a perfect method to assert n
             n = sum(1 for line in open(file))
 
+            if chunksize is not None:
+                assert type(chunksize)==int
+                self.chunksize = chunksize
+            else:
+                self.chunksize = n
+
             #deduce number_of_chunk_max
             if number_of_chunk_max is not None:
                 self.nb_of_chunks = number_of_chunk_max
             else:
-                self.nb_of_chunks = math.ceil(n/chunksize)
+                self.nb_of_chunks = math.ceil(n/self.chunksize)
 
         #remember this method is called to ensure consistency and prevent errors
         self.feed_with_is_called = True
@@ -514,8 +519,10 @@ class Graph:
         #remember this method is called, to prevent errors
         self.build_is_called = True
 
-    def run(self, n_iter = 10, run_id = None, X = None, Y = None, save = False):
+    def run(self, n_iter = 10, run_id = None, X = None, Y = None, save = False,
+        debug_array = None):
         """
+        →debug
         Run the implicit tensorflow graph.
 
         Parameters
@@ -549,7 +556,6 @@ class Graph:
         if run_id is None:
             run_id = time.strftime("%Y_%m_%d_%H_%M_%S", time.gmtime())
         else:
-            print(run_id)
             if not re.match("^[\\w ]+$", run_id):
                 err_bad_name(run_id)
 
@@ -594,6 +600,15 @@ class Graph:
                     #read chunks, and update global e, rho and beta
                     # in consequence
                     self.set_globals_from_chunks(sess, run_kwargs=run_kwargs)
+
+
+                #debug array-----
+                if debug_array is not None:
+                    ans = self.__run(sess,[ops[op] for op in debug_array])
+                    for idx,an in enumerate(ans):
+                        print(debug_array[idx])
+                        print(an)
+                #----------------
 
                 #compute new elbo
                 statu, elbo, best_elbo = \
@@ -690,10 +705,13 @@ class Graph:
 
                 #decode data
                 data = np.asarray(chunk)
-
-                #→ transformations directly inside the run... not that good
-                X = data[:,1:]/253.
-                Y = to_one_hot(data[:,0])
+                #handle X and Y
+                if self.to_one_hot:
+                    X = data[:,1:]
+                    Y = to_one_hot(data[:,0],self.k)
+                else:
+                    X = data[:,self.k:self.d+self.k]
+                    Y = data[:,:self.k]
 
                 #create the feeding dict
                 d_ = {"X:0" : X, "Y:0" : Y}

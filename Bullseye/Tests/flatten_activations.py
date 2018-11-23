@@ -14,7 +14,7 @@ result_filename = os.path.join(cwd,"data","flatten_activations.data")
 def flatten_activations(recompute = False):
     if recompute:
         theta_0, x_array, y_array = \
-                Bullseye.generate_multilogit(d = 10, n = 10**4, k = 10)
+                Bullseye.generate_multilogit(d = 100, n = 10**5, k = 10)
         
         df = pd.DataFrame(columns=["method","times","status"])
         

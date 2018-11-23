@@ -86,10 +86,9 @@ def read_idx(filename):
         shape = tuple(struct.unpack('>I', f.read(4))[0] for d in range(dims))
         return np.fromstring(f.read(), dtype=np.uint8).reshape(shape)
 
-def to_one_hot(y):
+def to_one_hot(y,k):
     y = list(map(int,y))
-    n_values = np.max(y) + 1
-    return np.eye(n_values)[y]
+    return np.eye(k)[y]
 
 def from_one_hot(y):
     return np.asarray([np.where(r==1)[0][0] for r in y])

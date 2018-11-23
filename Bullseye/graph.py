@@ -47,6 +47,7 @@ def construct_bullseye_graph(G):
     """
 
     #X, Y related
+    #always put Y as a [n,k] tensor
     if G.X is None and G.Y is None:
         if not G.tf_dataset:
             X = tf.placeholder(tf.float32, name='X', shape = [None, d])
@@ -59,9 +60,15 @@ def construct_bullseye_graph(G):
             iterator = batched_dataset.make_initializable_iterator()
 
             it_next = iterator.get_next()
-            X = tf.transpose(tf.convert_to_tensor(it_next[1:(d+1)]))
-            Y = tf.one_hot(tf.cast(tf.transpose(it_next[0]),'int32'), k)
 
+            if not G.to_one_hot:
+                #→ to change, not that nice
+                X = tf.transpose(tf.convert_to_tensor(it_next[k:(d+k)]))
+                Y = tf.transpose(tf.convert_to_tensor(it_next[:k]))
+            else:
+                read_Y = tf.transpose(it_next[0])
+                X = tf.transpose(tf.convert_to_tensor(it_next[1:(d+1)]))
+                Y = tf.one_hot(tf.cast(read_Y, 'int32'), k)
     else:
         X = tf.get_variable("X", G.X.shape,initializer = tic(G.X),
                             dtype = tf.float32)
@@ -131,7 +138,7 @@ def construct_bullseye_graph(G):
         #requires to compute sqrt of beta
         #step_size*(tf.linalg.inv(beta)) + (1-step_size) * new_cov_sqrt
         err("backtracking_degree==2")
-        return ""
+        return
 
 
     new_mu_  = mu - step_size * tf.einsum('ij,j->i', new_cov_, rho)
@@ -140,7 +147,7 @@ def construct_bullseye_graph(G):
     update_new_mu = tf.assign(new_mu, new_mu_)
 
     #SVD decomposition of new_cov
-    new_cov_S_, new_cov_U, new_cov_V = tf.linalg.svd(new_cov)
+    new_cov_S_, new_cov_U, new_cov_V = tf.linalg.svd(new_cov_)
     new_cov_S_sqrt = tf.linalg.diag(tf.sqrt(new_cov_S_))
     new_cov_sqrt_ = new_cov_U @\
                     tf.matmul(new_cov_S_sqrt,new_cov_V, adjoint_b=True) #[p,p]
@@ -253,8 +260,8 @@ def construct_bullseye_graph(G):
             update_global_rho = []
             update_global_beta = []
 
-            width = len(str(G.num_of_chunks))
-            for _ in range(G.num_of_chunks):
+            width = len(str(G.nb_of_chunks))
+            for _ in range(G.nb_of_chunks):
                 idx = "chunk_{_:0>{width}}".format(_=_, width=width)
                 global_e.append(tf.get_variable("global_e_"+idx, [],
                                         initializer = tf.zeros_initializer,
@@ -281,7 +288,7 @@ def construct_bullseye_graph(G):
         global_list = []
         if G.tf_dataset:
             global_list += [iterator]
-        if not G.chunk_as_sum:
+        if G.chunk_as_sum:
             global_list += [global_e, global_rho, global_beta]
 
         init_globals = tf.variables_initializer(global_list)
@@ -391,6 +398,13 @@ def construct_bullseye_graph(G):
                 'computed_rho_prior' : computed_rho_prior,
                 'computed_beta' : computed_beta,
                 'computed_beta_prior' : computed_beta_prior,
+
+                'new_cov' : new_cov,
+                'new_mu': new_mu,
+                'new_cov_S' : new_cov_S,
+                'new_cov_sqrt' : new_cov_sqrt,
+                'update_new_cov' : update_new_cov,
+                'update_new_cov_sqrt' : update_new_cov_sqrt,
 
                 'iteration' : iteration,
                 'status' : status,
