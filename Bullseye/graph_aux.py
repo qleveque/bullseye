@@ -504,6 +504,50 @@ def aux_local_parameters(G,A_array,A_array_kernel,new_mu,new_cov,new_cov_sqrt):
 
     return local_mu, local_std
 
+def aux_activate_psi_functions(G, Activations, Y):
+    """
+    →→→
+    Compute the activated functions ψ(a), ∇ψ(a), Hψ(a), ∀a ∈ Activations.
+    """
+    #using flatten Activations
+    if G.flatten_activations:
+        s,_,k = A.get_shape().as_list()
+        n = tf.shape(A)[1]
+        #flatten data
+        Activations_flat = tf.reshape(Activations, [s*n,k])
+        Y_flat = tf.tile(Y, (s,1))
+
+        #compute flatten activated functions
+        #recall we have Activations of size [s×n]
+        #compute:
+        # phi[j]=ψ(aⱼ)                          of size [s×n]
+        # grad_phi[j]=∇ψ(aⱼ)                    of size [s×n,k]
+        # hess_phi[j]=Hψ(aⱼ)                    of size [s×n,k,k]
+        psi_flat = G.Psi(Activations_flat, Y_flat) #[s*n]
+        grad_psi_flat = G.grad_Psi(Activations_flat, Y_flat) #[s*n,k]
+        hess_psi_flat = G.hess_Psi(Activations_flat, Y_flat) #[s*n,k,k]
+
+        #unflatten data
+        psi = tf.reshape(phi_flat, [s,n])
+        grad_psi = tf.reshape(grad_phi_flat, [s,n,k])
+        hess_psi = tf.reshape(hess_phi_flat, [s,n,k,k])
+
+    #using map_fn
+    else:
+        #recall we have Activations of size [s,n].
+        #compute:
+        # phi[j,i]=ψ(aⱼᵢ)                       of size [s,n]
+        # grad_phi[j,i]=∇ψ(aⱼᵢ)                 of size [s,n,k]
+        # hess_phi[j,i]=Hψ(aⱼᵢ)                 of size [s,n,k,k]
+        psi = tf.map_fn(lambda a: G.Psi(a, Y), Activations,
+            dtype=tf.float32)
+        grad_psi = tf.map_fn(lambda a: G.grad_Psi(a, Y), Activations,
+            dtype=tf.float32)
+        hess_psi = tf.map_fn(lambda a: G.hess_Psi(a, Y), Activations,
+            dtype=tf.float32)
+
+    return phi, grad_phi, hess_phi
+
 def aux_activate_functions(G, Activations, Y):
     """
     Compute the activated functions ϕ(a), ∇ϕ(a), Hϕ(a), ∀a ∈ Activations.
@@ -582,7 +626,7 @@ def auto_grad_Phi(Phi,A,Y):
 
 def auto_hess_Phi(Phi,A,Y):
     #→
-    J = auto_grad_Psi(Phi,A,Y)
+    J = auto_grad_Phi(Psi,X,Y,theta)
     return hess_from_grad(J)
 
 def hess_from_grad(grad):

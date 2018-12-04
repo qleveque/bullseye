@@ -42,7 +42,6 @@ def compute_p_multilogit(d,k):
 compute_ps["multilogit"] = compute_p_multilogit
 
 def compute_p_LM(d,k):
-    assert k == 1
     return d+1
 compute_ps["LM"] = compute_p_LM
 
@@ -103,6 +102,7 @@ def Psi_LM(X,Y,theta):
     ψ(X,Y,Θ) = ψ(X,Y,β,σ²) = -0.5·n·[log(2π) + σ²] - 0.5 * 1/σ² ∑ᵢ(Yᵢ-Xᵢβ)²
     """
     #size of the sample
+    #→→→ log sigma
     n = tf.cast(tf.shape(X)[0],tf.float32)
     d = X.shape.as_list()[1]
     #split θ into β and σ
@@ -113,6 +113,7 @@ def Psi_LM(X,Y,theta):
     #compute the log likelihood
     log_likelihood = -0.5*n*(tf.log(2*math.pi)+tf.log(sigma_squared)) \
                 - 0.5 * 1/sigma_squared * tf.reduce_sum(e)
+    #print(-tf.squeeze(log_likelihood))
     return -tf.squeeze(log_likelihood)
 predefined_Psis["LM"]=[Psi_LM, None, None]
 

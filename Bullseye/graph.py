@@ -101,6 +101,19 @@ def construct_bullseye_graph(G):
                         dtype = tf.float32)
     cov  = tf.get_variable("cov",[p,p],initializer = tic(G.cov_0),
                         dtype = tf.float32)
+
+    cov_U_, cov_S_, cov_V_ = np.linalg.svd(cov)
+    
+    cov_S = tf.get_variable("cov_S",list(cov_S_.shape),
+                        initializer = tic(cov_S_),
+                        dtype = tf.float32)
+    cov_U = tf.get_variable("cov_U",list(cov_U_.shape),
+                        initializer = tic(cov_U_),
+                        dtype = tf.float32)
+    cov_V = tf.get_variable("cov_V",list(cov_V_.shape),
+                        initializer = tic(cov_V_),
+                        dtype = tf.float32)
+
     ELBO = tf.get_variable("elbo",[],initializer = tic(-np.infty),
                         dtype = tf.float32)
 
@@ -111,6 +124,9 @@ def construct_bullseye_graph(G):
                           dtype = tf.float32)
     beta = tf.get_variable("beta", [p,p],
                            initializer = tic(np.linalg.inv(G.cov_0)),
+                           dtype = tf.float32)
+    beta_inv = tf.get_variable("beta_inv", [p,p],
+                           initializer = tic(G.cov_0),
                            dtype = tf.float32)
 
     #step size
@@ -129,28 +145,32 @@ def construct_bullseye_graph(G):
 
     #backtracking
     if G.backtracking_degree==-1:
-        new_cov_=tf.linalg.inv(step_size * beta +\
-                               (1-step_size) * tf.linalg.inv(cov))
+        # Σⁿ⁺¹ = (γ·β + (1-γ)·(Σⁿ)⁻¹)⁻¹
+        new_cov_=tf.linalg.inv(step_size * beta \
+                               + (1-step_size) * tf.linalg.inv(cov))
     elif G.backtracking_degree==1:
-        new_cov_ = step_size*(tf.linalg.inv(beta)) + (1-step_size) * cov
-    elif G.backtracking_degree==2:
+        # Σⁿ⁺¹ = γ·β⁻¹ + (1-γ)·Σⁿ
+        new_cov_ = step_size*(beta_inv + (1-step_size) * cov
+    elif G.backtracking_degree==0.5:
+        #Sⁿ⁺¹ = γ·β^(-½) + (1-γ)·Sⁿ                with Sⁿ = (Σⁿ)^½
+
         #→ to see again, new_cov_sqrt should not be updated here, but not sure
-        #requires to compute sqrt of beta
-        #step_size*(tf.linalg.inv(beta)) + (1-step_size) * new_cov_sqrt
-        err("backtracking_degree==2")
-        return
+        #requires to compute sqrt of beta which here may be improved
+        new_cov_sqrt_ = step_size*(matrix_sqrt(beta_inv)) \
+                        + (1-step_size) * new_cov_sqrt
+        new_cov_ = new_cov_sqrt_ @ tf.transpose(new_cov_sqrt_)
 
 
-    new_mu_  = mu - step_size * tf.einsum('ij,j->i', new_cov_, rho)
+    new_mu_  = mu - step_size * tf.einsum('ij,j->i', beta_inv, rho)
 
     update_new_cov = tf.assign(new_cov, new_cov_)
     update_new_mu = tf.assign(new_mu, new_mu_)
 
     #SVD decomposition of new_cov
-    new_cov_S_, new_cov_U, new_cov_V = tf.linalg.svd(new_cov_)
-    new_cov_S_sqrt = tf.linalg.diag(tf.sqrt(new_cov_S_))
+    new_cov_S_, new_cov_U_, new_cov_V_ = tf.linalg.svd(new_cov_)
+    new_cov_S_sqrt_ = tf.linalg.diag(tf.sqrt(new_cov_S_))
     new_cov_sqrt_ = new_cov_U @\
-                    tf.matmul(new_cov_S_sqrt,new_cov_V, adjoint_b=True) #[p,p]
+                    tf.matmul(new_cov_S_sqrt_,new_cov_V_, adjoint_b=True) #[p,p]
     new_cov_S = tf.get_variable("new_cov_S", [p],
                                 initializer = tf.zeros_initializer,
                                 dtype=tf.float32)
@@ -341,6 +361,7 @@ def construct_bullseye_graph(G):
         update_e = tf.assign(e, new_e, name = "update_e")
         update_rho  = tf.assign(rho,  new_rho, name = "update_rho")
         update_beta = tf.assign(beta, new_beta, name = "update_beta")
+        update_beta_inv = tf.linalg.inv(new_beta)
         update_cov  = tf.assign(cov, new_cov, name = "update_cov")
         update_mu = tf.assign(mu, new_mu, name = "update_mu")
         update_ELBO = tf.assign(ELBO, new_ELBO, name = "update_ELBO")
@@ -348,6 +369,7 @@ def construct_bullseye_graph(G):
         status_to_accepted = tf.assign(status, "accepted")
 
         with tf.control_dependencies([update_e, update_rho, update_beta,
+                                     update_beta_inv,
                                      update_cov, update_mu, update_ELBO,
                                      update_step_size]):
             return [tf.assign(status, bcolors.OKGREEN+"accepted"+bcolors.ENDC),
@@ -367,8 +389,21 @@ def construct_bullseye_graph(G):
     """
     ITERATIONS
     """
+
+    if G.eigmin_condition:
+        #the eigmin_condition requests that eigmin(βⁿ⁺¹) > ½·eigmin(βⁿ)
+        #note that:
+        #   eigmin(βⁿ⁺¹) = min(new_cov_S⁻¹) = max(new_cov_S)⁻¹
+        #   eigmin(βⁿ) = min(beta_S)
+        new_eigmin = tf.linalg.inv(tf.reduce_max(new_cov_S))
+        curr_eigmin = tf.reduce_min(beta_S)
+        condition_update = (new_ELBO > ELBO) and (2*new_eigmin > curr_eigmin)
+    else:
+        condition_update = new_ELBO > ELBO
+
+
     brutal_iteration = accepted_update
-    soft_iteration = tf.cond(new_ELBO > ELBO, accepted_update, refused_update)
+    soft_iteration = tf.cond(condition_update, accepted_update, refused_update)
 
     if G.brutal_iteration:
         iteration = brutal_iteration
@@ -388,6 +423,9 @@ def construct_bullseye_graph(G):
                 'beta' : beta,
                 'X' : X,
                 'Y' : Y,
+
+                'new_e': new_e,
+
                 'update_globals' : update_globals,
                 'init_globals' : init_globals,
                 'global_e' : global_e,

@@ -78,7 +78,7 @@ class Graph:
             "graph","in_graph",
             #data related
             "d","k","p","X","Y","prior_std",
-            "file","chunksize","nb_of_chunks", "number_of_chunk_max",
+            "file","chunksize","nb_of_chunks",
             #init related
             "mu_0","cov_0",
             #φ's, ψ's and projections related
@@ -132,9 +132,6 @@ class Graph:
                 #when prior covariance is diagonal, prevents the use of
                 # exponential space and improves speed
                 "keep_1d_prior"             : True,
-                #when streaming a file, consider only a given number of
-                # chunks
-                ""       : 0,
                 #use the natural value of eᵢ,ρᵢ,βᵢ centered in 0
                 "natural_param_likelihood"  : False,
                 #same as natural_param_likelihood for the prior
@@ -155,7 +152,9 @@ class Graph:
                 #backtracking degree
                 "backtracking_degree"       : -1,
                 #if need to transform the vector into one_hot when reading files
-                "to_one_hot"                : False
+                "to_one_hot"                : False,
+                #eigmin condition on the new beta
+                "eigmin_condition"          : True
                 }
 
         #keep in mind the name of those options
@@ -216,9 +215,9 @@ class Graph:
             assert len(Y.shape) in [1,2]
 
             if len(X.shape)==1:
-                X = expand_dims(X,0)
+                X = np.expand_dims(X,1)
             if len(Y.shape)==1:
-                Y = expand_dims(Y,0)
+                Y = np.expand_dims(Y,1)
 
             self.X = X
             self.Y = Y
@@ -457,7 +456,7 @@ class Graph:
         if type(mu_0) in [float, int]:
             self.mu_0 = mu_0 * np.ones(self.p)
         elif len(mu_0.shape) == 1:
-            assert list(mu_0.shape) == [p]
+            assert list(mu_0.shape) == [self.p]
             self.mu_0 = mu_0
 
         #handle Σ₀
