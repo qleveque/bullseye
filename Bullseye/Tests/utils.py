@@ -12,6 +12,7 @@ def handle_fig(title):
     image_path = os.path.join(bullseye_tests_dir,title+'.png')
     plt.savefig(image_path)
     open_file(image_path)
+    plt.clf()
 
 def open_file(d):
     if sys.platform in ['win32','Windows']:

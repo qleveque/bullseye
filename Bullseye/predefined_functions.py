@@ -41,8 +41,12 @@ def compute_p_multilogit(d,k):
     return d*k
 compute_ps["multilogit"] = compute_p_multilogit
 
-def compute_p_LM(d,k):
+def compute_p_LM_sigma(d,k):
     return d+1
+compute_ps["LM_sigma"] = compute_p_LM_sigma
+
+def compute_p_LM(d,k):
+    return d
 compute_ps["LM"] = compute_p_LM
 
 def compute_p_CNN(d, k, conv_sizes, pools):
@@ -97,24 +101,60 @@ def Psi_multilogit(X,Y,theta):
     return tf.reduce_sum(Phi_multilogit(A,Y), axis=0)
 predefined_Psis["multilogit"] = [Psi_multilogit, None, None]
 
-def Psi_LM(X,Y,theta):
+def Psi_LM_sigma(X,Y,theta):
     """
-    ψ(X,Y,Θ) = ψ(X,Y,β,σ²) = -0.5·n·[log(2π) + σ²] - 0.5 * 1/σ² ∑ᵢ(Yᵢ-Xᵢβ)²
+    ψ(X,Y,Θ) = ψ(X,Y,β,σ) = 0.5·n·[log(2π) + log(σ²)] + 0.5 * 1/σ² ∑ᵢ(Yᵢ-Xᵢβ)²
     """
     #size of the sample
-    #→→→ log sigma
     n = tf.cast(tf.shape(X)[0],tf.float32)
     d = X.shape.as_list()[1]
+    
     #split θ into β and σ
-    beta, sigma_squared = tf.split(theta, [d,1])
+    beta, sigma= tf.split(theta, [d,1])
+    
     #e
     e = tf.square(tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,beta))
-
+    
     #compute the log likelihood
-    log_likelihood = -0.5*n*(tf.log(2*math.pi)+tf.log(sigma_squared)) \
-                - 0.5 * 1/sigma_squared * tf.reduce_sum(e)
-    #print(-tf.squeeze(log_likelihood))
+    log_likelihood = -0.5*n*(tf.log(2*math.pi)+tf.log(tf.square(sigma))) \
+                - 0.5 * 1/tf.square(sigma)* tf.reduce_sum(e)
     return -tf.squeeze(log_likelihood)
+predefined_Psis["LM_sigma"]=[Psi_LM_sigma, None, None]
+
+def Psi_LM(X,Y,theta):
+    """
+    ψ(X,Y,Θ) = ψ(X,Y,β) = 0.5·n·log(2π) + 0.5 • ∑ᵢ(Yᵢ-Xᵢβ)²
+    """
+    #size of the sample
+    n = tf.cast(tf.shape(X)[0],tf.float32)
+    #split θ into β and σ
+    beta = theta
+    #e
+    e = tf.square(tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,beta))
+    #compute the log likelihood
+    log_likelihood = -0.5*n*tf.log(2*math.pi) - 0.5*tf.reduce_sum(e)
+    return -log_likelihood
+
+def grad_Psi_LM(X,Y,theta):
+    """
+    ψ(X,Y,Θ) = ψ(X,Y,β) = 0.5·n·log(2π) + 0.5 • ∑ᵢ(Yᵢ-Xᵢβ)²
+    """
+    #β
+    beta = theta
+    #e
+    e = tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,beta)
+    #compute the grad log likelihood
+    grad_log_likelihood = tf.einsum('ij,i->j',X,e)
+    return -grad_log_likelihood
+
+def hess_Psi_LM(X,Y,theta):
+    """
+    ψ(X,Y,Θ) = ψ(X,Y,β) = 0.5·n·log(2π) + 0.5 • ∑ᵢ(Yᵢ-Xᵢβ)²
+    """
+    #compute the hess log likelihood
+    hess_log_likelihood = -tf.einsum('ji,jk->ik',X,X)
+    return -hess_log_likelihood
+
 predefined_Psis["LM"]=[Psi_LM, None, None]
 
 def Psi_CNN(X,Y,theta,conv_sizes,pools):
@@ -167,6 +207,73 @@ def Psi_CNN(X,Y,theta,conv_sizes,pools):
     P=Softmax_probabilities(Scores)
     return -tf.reduce_sum(tf.log(tf.einsum('nk,nk->n',Y,P)),0)
 predefined_Psis["CNN"] = [Psi_CNN, None, None]
+
+#===============================================================================
+
+predefined_Pis = {}
+Pi_docstring = """
+Pi functions
+============
+
+Refers to Pi_*(), grad_Pi_*() and hess_Pi_*().
+
+Prior part of the contribution into the ψ function.
+
+The operations used within these functions must be tensorflow
+operations.
+
+Parameters
+----------
+Theta : tf.tensor [n,k]
+        Activation matrix.
+
+Returns
+-------
+    []:
+        π(A)
+or
+    [p]:
+        ∇π(A)
+or
+    [p,p]:
+        Hπ(A)
+"""
+
+"""
+NORMAL
+"""
+#iid
+def Pi_normal_iid(theta, mu = 0, sigma = 1):
+    #ensures each variable is float
+    p = tf.to_float(tf.shape(theta))
+    mu = tf.to_float(mu)
+    sigma = tf.to_float(sigma)
+    #compute
+    summands = tf.square(theta-mu*tf.ones_like(theta))
+    times = -0.5/tf.square(sigma)
+    const = -0.5*p* (tf.log(2*math.pi) + 2*tf.log(sigma))
+    l = tf.squeeze(times*tf.reduce_sum(summands)+const)
+    return -l
+def grad_Pi_normal_iid(theta, mu = 0, sigma = 1):
+    #ensures each variable is float
+    mu = tf.to_float(mu)
+    sigma = tf.to_float(sigma)
+    #compute
+    times = -1.0/tf.square(sigma)
+    array = theta-mu*tf.ones_like(theta)
+    l = times*array
+    return -l
+def hess_Pi_normal_iid(theta, mu = 0, sigma = 1):
+    #ensures each variable is float
+    mu = tf.to_float(mu)
+    sigma = tf.to_float(sigma)
+    #compute
+    l = - 1/tf.square(sigma)
+    p = tf.shape(theta)[0]
+    I = tf.eye(p)
+    return -l*I
+
+predefined_Pis["normal_iid"] = [Pi_normal_iid, grad_Pi_normal_iid, hess_Pi_normal_iid]
 
 #===============================================================================
 

@@ -40,7 +40,7 @@ def construct_bullseye_graph(G):
 
     #for simplicity
     d,k,p = [G.d, G.k, G.p]
-    dim_samp = p if G.local_std_trick else k
+    dim_samp = p if not G.local_std_trick else k
 
     """
     VARIABLES
@@ -76,21 +76,19 @@ def construct_bullseye_graph(G):
                             dtype = tf.float32)
 
     #prior_std related
+    """
+    →
     if G.keep_1d_prior:
         prior_std = tf.get_variable("prior_std",
                         [p],
                         initializer = tic(np.diag(G.prior_std)),
                         dtype = tf.float32)
-    elif not G.sparse:
+    else:
         prior_std = tf.get_variable("prior_std",
                         G.prior_std.shape,
                         initializer = tic(G.prior_std),
                         dtype = tf.float32)
-    else:
-        prior_std = tf.SparseTensor(indices = [[i,i] for i in range(p)],
-                                    values = [G.prior_std]*p,
-                                    dense_shape = [p,p])
-
+    """
 
     #status
     status = tf.get_variable("status",[], initializer = tf.zeros_initializer,
@@ -100,18 +98,6 @@ def construct_bullseye_graph(G):
     mu = tf.get_variable("mu",[p],initializer = tic(G.mu_0),
                         dtype = tf.float32)
     cov  = tf.get_variable("cov",[p,p],initializer = tic(G.cov_0),
-                        dtype = tf.float32)
-
-    cov_U_, cov_S_, cov_V_ = np.linalg.svd(cov)
-    
-    cov_S = tf.get_variable("cov_S",list(cov_S_.shape),
-                        initializer = tic(cov_S_),
-                        dtype = tf.float32)
-    cov_U = tf.get_variable("cov_U",list(cov_U_.shape),
-                        initializer = tic(cov_U_),
-                        dtype = tf.float32)
-    cov_V = tf.get_variable("cov_V",list(cov_V_.shape),
-                        initializer = tic(cov_V_),
                         dtype = tf.float32)
 
     ELBO = tf.get_variable("elbo",[],initializer = tic(-np.infty),
@@ -125,9 +111,6 @@ def construct_bullseye_graph(G):
     beta = tf.get_variable("beta", [p,p],
                            initializer = tic(np.linalg.inv(G.cov_0)),
                            dtype = tf.float32)
-    beta_inv = tf.get_variable("beta_inv", [p,p],
-                           initializer = tic(G.cov_0),
-                           dtype = tf.float32)
 
     #step size
     step_size = tf.get_variable("step_size", [], initializer = tic(G.speed),
@@ -140,76 +123,112 @@ def construct_bullseye_graph(G):
     new_mu = tf.get_variable("new_mu",[p],
                               initializer = tf.zeros_initializer,
                               dtype = tf.float32)
+    new_logdet = tf.get_variable("newlogdet", [],
+                              initializer = tf.zeros_initializer,
+                              dtype = tf.float32)
 
-    assert G.backtracking_degree in [-1,1,2]
+    #new_cov_sqrt
+    if (not G.local_std_trick or G.Psi is not None) or G.compute_gamma or not G.prior_iid:
+        new_cov_sqrt = tf.get_variable("new_cov_sqrt", [p,p],
+                                       initializer = tic(np.eye(p)),
+                                       dtype = tf.float32)
+    else:
+        new_cov_sqrt = None
 
+    if G.comp_opt is "cholesky":
+        beta_chol = tf.linalg.cholesky(beta)
+        beta_sqrt = tf.transpose(beta_chol)
+        #beta_inv = tf.linalg.inv(beta)
+        #beta_inv_sqrt = tf.linalg.inv(beta_sqrt)
+        beta_inv = tf.transpose(tf.cholesky_solve(beta_chol, tf.eye(p)))
+        beta_inv_sqrt = matrix_sqrt(beta_inv)
+    elif G.comp_opt=="svd":
+        s_beta, u_beta, v_beta = tf.linalg.svd(beta)
+        s_beta_sqrt = tf.linalg.diag(tf.sqrt(s_beta))
+        s_beta_inv = tf.linalg.diag(tf.reciprocal(s_beta))
+        s_beta_inv_sqrt = tf.linalg.diag(tf.reciprocal(tf.sqrt(s_beta)))
+        
+        beta_sqrt = tf.matmul(u_beta, tf.matmul(s_beta_sqrt, v_beta, adjoint_b=True))
+        beta_inv = tf.matmul(u_beta, tf.matmul(s_beta_inv, v_beta, adjoint_b=True))
+        beta_inv_sqrt = tf.matmul(u_beta, tf.matmul(s_beta_inv_sqrt, v_beta, adjoint_b=True))
+
+    #from definition of Σₘ
+    cov_max = beta_inv
+    cov_max_inv = beta
+    cov_max_sqrt = beta_inv_sqrt
+
+    assert G.backtracking_degree in [-1,1,0.5]
+
+    if not G.compute_gamma:
+        gamma = step_size
+    else:
+        #compute
+        #K⁻¹=Σ^½•β•Σ^½
+        K_inv = new_cov_sqrt @ beta @ new_cov_sqrt
+        K_inv_sqrt = tf.linalg.cholesky(K_inv)
+        K_eig = tf.math.reciprocal(tf.linalg.diag_part(K_inv))
+        eig_limitation = 0.5
+        K_eigmin = tf.reduce_min(K_eig)
+        gamma = (eig_limitation - 1)/(K_eigmin -1)
     #backtracking
     if G.backtracking_degree==-1:
-        # Σⁿ⁺¹ = (γ·β + (1-γ)·(Σⁿ)⁻¹)⁻¹
-        new_cov_=tf.linalg.inv(step_size * beta \
-                               + (1-step_size) * tf.linalg.inv(cov))
+        # Σⁿ⁺¹ = (γ·(Σₘ)⁻¹ + (1-γ)·(Σⁿ)⁻¹)⁻¹
+        new_cov_=tf.linalg.inv(gamma * cov_max_inv \
+                               + (1-gamma) * tf.linalg.inv(cov))
+        new_cov_sqrt_ = None
     elif G.backtracking_degree==1:
-        # Σⁿ⁺¹ = γ·β⁻¹ + (1-γ)·Σⁿ
-        new_cov_ = step_size*(beta_inv + (1-step_size) * cov
+        # Σⁿ⁺¹ = γ·Σₘ + (1-γ)·Σⁿ
+        new_cov_ = gamma*(cov_max) + (1-gamma) * cov
+        new_cov_sqrt_ = None
+        
     elif G.backtracking_degree==0.5:
-        #Sⁿ⁺¹ = γ·β^(-½) + (1-γ)·Sⁿ                with Sⁿ = (Σⁿ)^½
-
-        #→ to see again, new_cov_sqrt should not be updated here, but not sure
-        #requires to compute sqrt of beta which here may be improved
-        new_cov_sqrt_ = step_size*(matrix_sqrt(beta_inv)) \
-                        + (1-step_size) * new_cov_sqrt
+        #Sⁿ⁺¹ = γ·Σₘ^(½) + (1-γ)·Sⁿ                with Sⁿ = (Σⁿ)^½
+        new_cov_sqrt_ = gamma*(cov_max_sqrt) \
+                        + (1-gamma) * new_cov_sqrt
         new_cov_ = new_cov_sqrt_ @ tf.transpose(new_cov_sqrt_)
 
 
+    if G.comp_opt=="cholesky":
+        #new_cov sqrt may already be calculated, see above
+        if new_cov_sqrt_ is None:
+            new_cov_sqrt_ = matrix_sqrt(new_cov_)
+        new_logdet_ = 2*tf.reduce_sum(tf.log(tf.linalg.diag_part(new_cov_sqrt_)))
+    
+    elif G.comp_opt=="svd":
+        s_new_cov, u_new_cov, v_new_cov = tf.linalg.svd(new_cov_)
+        #new_cov sqrt may already be calculated, see above
+        if new_cov_sqrt_ is None:
+            s_new_cov_sqrt = tf.linalg.diag(tf.sqrt(s_new_cov))
+            new_cov_sqrt_ = tf.matmul(u_new_cov, tf.matmul(s_new_cov_sqrt, v_new_cov, adjoint_b=True))
+        new_logdet_ = tf.reduce_sum(tf.log(s_new_cov))
+    
     new_mu_  = mu - step_size * tf.einsum('ij,j->i', beta_inv, rho)
 
     update_new_cov = tf.assign(new_cov, new_cov_)
     update_new_mu = tf.assign(new_mu, new_mu_)
+    update_new_logdet = tf.assign(new_logdet, new_logdet_)
 
-    #SVD decomposition of new_cov
-    new_cov_S_, new_cov_U_, new_cov_V_ = tf.linalg.svd(new_cov_)
-    new_cov_S_sqrt_ = tf.linalg.diag(tf.sqrt(new_cov_S_))
-    new_cov_sqrt_ = new_cov_U @\
-                    tf.matmul(new_cov_S_sqrt_,new_cov_V_, adjoint_b=True) #[p,p]
-    new_cov_S = tf.get_variable("new_cov_S", [p],
-                                initializer = tf.zeros_initializer,
-                                dtype=tf.float32)
-    new_cov_sqrt = tf.get_variable("new_cov_sqrt", [p,p],
-                                   initializer = tf.zeros_initializer,
-                                   dtype = tf.float32)
+    update_new_parameters = [update_new_cov, update_new_mu, update_new_logdet]
 
-    update_new_cov_S = tf.assign(new_cov_S, new_cov_S_)
-    update_new_cov_sqrt = tf.assign(new_cov_sqrt, new_cov_sqrt_)
-
-    if G.local_std_trick:
-        update_new_parameters = [update_new_cov, update_new_mu,
-                                update_new_cov_S, update_new_cov_sqrt]
+    #new_cov_sqrt
+    if new_cov_sqrt is not None:
+        update_new_cov_sqrt = tf.assign(new_cov_sqrt, new_cov_sqrt_)
+        update_new_parameters += [update_new_cov_sqrt]
     else:
-        update_new_parameters = [update_new_cov, update_new_mu]
-    #sampling related
-    z, z_weights = generate_sampling_tf(G.s, dim_samp)
-    tf.identity(z, name = "z")
-    tf.identity(z_weights, name = "z_weights")
-
-    z_array_prior, weights_array_prior =\
-        np.polynomial.hermite.hermgauss(G.quadrature_deg)
-    z_prior  = tf.get_variable("z_prior",
-                                [G.quadrature_deg],
-                                initializer = tic(z_array_prior),
-                                dtype = tf.float32)
-    z_weights_prior  = tf.get_variable("z_weights_prior",
-                            [G.quadrature_deg],
-                            initializer = tic(weights_array_prior),
-                            dtype = tf.float32)
-    tf.identity(z_prior, name = "z_prior")
-    tf.identity(z_weights_prior, name = "z_weights_prior")
+        update_new_cov_sqrt = None
+    
+    #sampling hermite for normal iid prior
+    #→
+    z_hermite = None
+    weights_hermite = None
 
     """
     TRIPLETS
     """
     #LIKELIHOOD TRIPLET
     #for readability
-    ltargs = [new_mu,new_cov,new_cov_sqrt,z,z_weights]
+    ltargs = [new_mu,new_cov,new_cov_sqrt]
+    
     #if not batched
     if not G.m>0:
         computed_e, computed_rho, computed_beta = \
@@ -226,15 +245,10 @@ def construct_bullseye_graph(G):
 
     #PRIO TRIPLET
     #for readability
-    ptargs = [new_mu,new_cov,new_cov_sqrt,z_prior,z_weights_prior]
+    ptargs = [new_mu,new_cov,new_cov_sqrt,z_hermite,weights_hermite]
     #if not batched
-    if not G.m_prior>0:
-        computed_e_prior, computed_rho_prior, computed_beta_prior =\
-            prior_triplet(G, prior_std, *ptargs)
-    #if batched
-    else:
-        computed_e_prior, computed_rho_prior, computed_beta_prior =\
-            batched_prior_triplet(G, prior_std, *ptargs)
+    computed_e_prior, computed_rho_prior, computed_beta_prior =\
+        prior_triplet(G, *ptargs)
 
     tf.identity(computed_e_prior, name = "computed_e_prior")
     tf.identity(computed_rho_prior, name = "computed_rho_prior")
@@ -345,12 +359,8 @@ def construct_bullseye_graph(G):
     tf.identity(new_beta, name = "new_beta")
 
     #new ELBO
-    if not G.local_std_trick:
-        logdet_cov = tf.linalg.logdet(new_cov)
-    else :
-        logdet_cov = tf.reduce_sum(tf.log(new_cov_S), axis = 0)
-
-    new_ELBO = - new_e + 0.5 *  logdet_cov + 0.5 * np.log(2*np.pi*np.e)
+    H = 0.5 *  new_logdet + d * 0.5 * np.log(2*np.pi*np.e)
+    new_ELBO = - new_e + H
 
     tf.identity(new_ELBO, name = "new_ELBO")
 
@@ -361,15 +371,13 @@ def construct_bullseye_graph(G):
         update_e = tf.assign(e, new_e, name = "update_e")
         update_rho  = tf.assign(rho,  new_rho, name = "update_rho")
         update_beta = tf.assign(beta, new_beta, name = "update_beta")
-        update_beta_inv = tf.linalg.inv(new_beta)
         update_cov  = tf.assign(cov, new_cov, name = "update_cov")
         update_mu = tf.assign(mu, new_mu, name = "update_mu")
         update_ELBO = tf.assign(ELBO, new_ELBO, name = "update_ELBO")
         update_step_size=tf.assign(step_size, G.speed, name="update_step_size")
-        status_to_accepted = tf.assign(status, "accepted")
 
+        #→
         with tf.control_dependencies([update_e, update_rho, update_beta,
-                                     update_beta_inv,
                                      update_cov, update_mu, update_ELBO,
                                      update_step_size]):
             return [tf.assign(status, bcolors.OKGREEN+"accepted"+bcolors.ENDC),
@@ -380,7 +388,7 @@ def construct_bullseye_graph(G):
     """
     def refused_update():
         decrease_step_size = tf.assign(step_size,
-                                step_size*G.step_size_decrease_coef)
+                                step_size*G.step_size)
         #status_to_refused = tf.assign(status, "refused")
         with tf.control_dependencies([decrease_step_size]):
             return [tf.assign(status, bcolors.FAIL+"refused"+bcolors.ENDC),
@@ -395,9 +403,10 @@ def construct_bullseye_graph(G):
         #note that:
         #   eigmin(βⁿ⁺¹) = min(new_cov_S⁻¹) = max(new_cov_S)⁻¹
         #   eigmin(βⁿ) = min(beta_S)
-        new_eigmin = tf.linalg.inv(tf.reduce_max(new_cov_S))
-        curr_eigmin = tf.reduce_min(beta_S)
-        condition_update = (new_ELBO > ELBO) and (2*new_eigmin > curr_eigmin)
+        #new_eigmin = tf.linalg.inv(tf.reduce_max(new_cov_S))
+        #curr_eigmin = tf.reduce_min(beta_S)
+        #condition_update = (new_ELBO > ELBO) and (2*new_eigmin > curr_eigmin)
+        pass
     else:
         condition_update = new_ELBO > ELBO
 
@@ -423,7 +432,9 @@ def construct_bullseye_graph(G):
                 'beta' : beta,
                 'X' : X,
                 'Y' : Y,
-
+                'gamma' : gamma,
+                
+                'new_logdet' : new_logdet,
                 'new_e': new_e,
 
                 'update_globals' : update_globals,
@@ -439,7 +450,6 @@ def construct_bullseye_graph(G):
 
                 'new_cov' : new_cov,
                 'new_mu': new_mu,
-                'new_cov_S' : new_cov_S,
                 'new_cov_sqrt' : new_cov_sqrt,
                 'update_new_cov' : update_new_cov,
                 'update_new_cov_sqrt' : update_new_cov_sqrt,

@@ -82,9 +82,9 @@ def trace_results(run_id):
     elbos = []
     dirs = all_epoch_dirs(run_id)
     for dir in dirs:
-        mu = np.load(os.path.join(run_dir,"mu.npy"))
-        cov = np.load(os.path.join(run_dir,"cov.npy"))
-        elbo = np.load(os.path.join(run_dir,"elbo.npy"))
+        mu = np.load(os.path.join(dir,"mu.npy"))
+        cov = np.load(os.path.join(dir,"cov.npy"))
+        elbo = np.load(os.path.join(dir,"elbo.npy"))
 
         mus.append(mu)
         covs.append(cov)
@@ -108,9 +108,8 @@ def all_epoch_dirs(run_id):
     """
 
     run_dir = os.path.join(data_dir, run_id)
-    dirs = [os.path.join(run_dir,dir)
-            for dir in os.listdir(run_dir)
-            if re.match("^"+keyword,dir)]
+    dirs = [os.path.join(run_dir,dir) for dir in os.listdir(run_dir)
+            if re.match("^"+epoch_keyword,dir)]
     return dirs
 
 class RunSaver():
@@ -183,7 +182,7 @@ class RunSaver():
         if profiler:
             self.profiler = Profiler(run_dir)
 
-        #already save the Graph configuration into "config.json"
+        #save the Graph configuration into "config.json"
         self.save_config(G)
 
     def save_config(self, G):

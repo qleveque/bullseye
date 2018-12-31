@@ -177,7 +177,6 @@ tf.tensor [d, k]:
     Aᵢ corresponding to input xᵢ
 """
 def proj_multilogit(x, d, k):
-    #TODO
     x_tiled = tf.tile(x,[k])
     kp=tf.convert_to_tensor(np.kron(np.eye(k),np.ones((d,1))),
                             tf.float32)

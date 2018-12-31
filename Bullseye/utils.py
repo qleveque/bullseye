@@ -96,29 +96,28 @@ def from_one_hot(y):
 def sublist(a, b):
     return set(a) <= set(b)
 
-"""
-def decode_csv(line):
-   parsed_line = tf.decode_csv(line, record_defaults)
-   label =  parsed_line[-1]
-   # label is the last element of the list
-   del parsed_line[-1]
-   # delete the last element from the list
-   del parsed_line[0]
-   # even delete the first element bcz it is assumed NOT to be a feature
-   features = tf.stack(parsed_line)
-   # Stack features so that you can later vectorize forward prop., etc.
-   #label = tf.stack(label)
-   #NOT needed. Only if more than 1 column makes the label...
-   batch_to_return = features, label
-   return batch_to_return
-"""
-
 def matrix_sqrt(A):
-    s, u, v = tf.linalg.svd(A)
-    s_sqrt = tf.linalg.diag(tf.sqrt(s))
-    r = tf.matmul(u, tf.matmul(s_sqrt, v, adjoint_b=True))
+    #s, u, v = tf.linalg.svd(A)
+    #s_sqrt = tf.linalg.diag(tf.sqrt(s))
+    #r = tf.matmul(u, tf.matmul(s_sqrt, v, adjoint_b=True))
+    r = tf.transpose(tf.linalg.cholesky(A))
     return r
 
+def sym(M):
+    """
+    Apply the "Sym" operation to a square matrix, the purpose being to make it symmetric.
+    M ↦ M + M^T - diag(M)
+    """
+    return M + tf.transpose(M) - tf.diag(tf.linalg.diag_part(M))
+def Sym(Ms):
+    """
+    Apply the "Sym" operation to a set of square matrices.
+    """
+    return tf.map_fn(sym, Ms,  dtype=tf.float32)
+
+"""
+Color handling
+"""
 if sys.platform not in ['win32', 'Windows']:
     class bcolors:
         HEADER = '\033[95m'

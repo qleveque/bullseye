@@ -17,7 +17,8 @@ import math
 
 from .graph import construct_bullseye_graph
 from .predefined_functions import compute_ps,\
-    predefined_Phis, predefined_Psis, predefined_Projs
+    predefined_Phis, predefined_Psis,\
+    predefined_Projs, predefined_Pis
 from .profilers import RunSaver
 from .utils import *
 from .warning_handler import *
@@ -77,7 +78,7 @@ class Graph:
             #the implicit tensorflow graph
             "graph","in_graph",
             #data related
-            "d","k","p","X","Y","prior_std",
+            "d","k","p","X","Y",
             "file","chunksize","nb_of_chunks",
             #init related
             "mu_0","cov_0",
@@ -85,6 +86,9 @@ class Graph:
             "Psi","grad_Psi","hess_Psi",
             "Phi","grad_Phi","hess_Phi","Proj",
             "use_projs",
+            #π's related
+            "Pi","grad_Pi","hess_Pi",
+            "prior_iid",
             #saver related
             "saver"
             ]
@@ -99,32 +103,23 @@ class Graph:
                 "speed"                     : 1,
                 #γ will decrease as γ*step_size_decrease_coef when ELBO
                 # did not increase enough
-                "step_size_decrease_coef"   : 0.5,
+                "step_size"   : 0.5,
                 #number of sample to approximate expectations
-                "s"                         : 10,
-                #quadrature_deg is the degree of the gaussian hermite
-                # quadrature used to approximated prior expectation
-                "quadrature_deg"            : 12,
+                "s"                         : 100,
                 #we have s observations of the activations. make flatten
                 # activations to True in order to flatten the observations
                 # into a large unique observation.
                 "flatten_activations"       : False,
                 #when computing the local variances, compute the square roots
-                # one by one or use a trick to compute only the square root
-                # of cov
-                "local_std_trick"           : True ,
+                # one by one
+                "local_std_trick"           : True,
                 #number of batches for the likelihood
                 "m"                         : 0,
-                #number of batches for the prior
-                "m_prior"                   : 0,
                 #when computing ABA^T, compute the kernels H=AA^T for fast
                 #computations of ABA^T, but exponential space is required
                 "compute_kernel"            : False,
                 #same as compute_kernel, but for the prior
                 "compute_prior_kernel"      : False,
-                #/!\ IN CONSTRUCTION /!\
-                #tests to improve capacities with sparse matrices
-                "sparse"                    : True,
                 #when streaming a file, if chunk_as_sum is true, does not
                 # keep track of the different values of eᵢ,ρᵢ,βᵢ in order
                 # to save space
@@ -133,14 +128,11 @@ class Graph:
                 # exponential space and improves speed
                 "keep_1d_prior"             : True,
                 #use the natural value of eᵢ,ρᵢ,βᵢ centered in 0
-                "natural_param_likelihood"  : False,
-                #same as natural_param_likelihood for the prior
-                "natural_param_prior"       : True,
+                "natural_param"             : False,
                 #make the run silent or not
                 "silent"                    : True,
                 #when streaming through a file, use tensorflow dataset class
                 "tf_dataset"                : False,
-                #/!\ IN CONSTRUCTION /!\
                 #use einsum or dot_product when multiplying big matrices
                 "use_einsum"                : True,
                 #include timeliner in saved informations
@@ -148,13 +140,21 @@ class Graph:
                 #include tf profiler in saved informations,
                 "profiler"                  : False,
                 #include results of each epochs in saved informations
-                "keep_track"                : False,
+                "keep_track"                : True,
                 #backtracking degree
-                "backtracking_degree"       : -1,
+                "backtracking_degree"       : 1,
                 #if need to transform the vector into one_hot when reading files
                 "to_one_hot"                : False,
                 #eigmin condition on the new beta
-                "eigmin_condition"          : True
+                "eigmin_condition"          : False,
+                #comp_opt
+                "comp_opt"                  : "cholesky",
+                #compute_gamma : equation to ensure positive semi-definite
+                "compute_gamma"             : False,
+                #autograd
+                "compute_grad"              : "std",
+                #autohess
+                "compute_hess"              : "std"    
                 }
 
         #keep in mind the name of those options
@@ -272,8 +272,7 @@ class Graph:
 
     def set_predefined_model(self, model,
         phi_option=None, proj_option=None, psi_option=None,
-        prior_std = 1,
-        use_projections = True,
+        use_projections = False,
         **specific_parameters):
         """
         →specific_parameters
@@ -360,7 +359,6 @@ class Graph:
             if hess_Psi_ is not None:
                 hess_Psi = lambda X,Y,theta : \
                         hess_Psi_(X,Y,theta,**specific_parameters)
-
             #use other method
             self.set_model(Psi=Psi, grad_Psi=grad_Psi, hess_Psi=hess_Psi, p=p)
 
@@ -403,7 +401,7 @@ class Graph:
             if hess_Psi is None:
                 self.hess_Psi = (lambda x,y,t: auto_hess_Psi(self.Psi,x,y,t))
             else:
-                self.hess_Psi = grad_Psi
+                self.hess_Psi = hess_Psi
         #method 2
         else:
             self.use_projs = True
@@ -418,7 +416,7 @@ class Graph:
                 self.grad_Phi = grad_Phi
             #Hϕ
             if hess_Phi is None:
-                self.grad_Phi = (lambda a,y: auto_hess_Phi(self.Phi,a,y))
+                self.hess_Phi = (lambda a,y: auto_hess_Phi(self.Phi,a,y))
             else:
                 self.hess_Phi = hess_Phi
 
@@ -428,6 +426,7 @@ class Graph:
         #handle std_prior
         #depending on the form of the given std_prior, transform it into a p×p
         #matrix.
+        """
         if type(prior_std) == int:
             self.prior_std = prior_std * np.eye(self.p)
         elif len(list(prior_std.shape)) == 1:
@@ -436,9 +435,61 @@ class Graph:
         else:
             assert list(prior_std.shape) == [self.p, self.p]
             self.prior_std = prior_std
-
+        """
+        
         #remember this method is called, to prevent errors
         self.set_model_is_called = True
+
+    def set_predefined_prior(self, prior, iid = False,
+        **specific_parameters):
+        """
+        →
+        """
+        #get the π's
+        Pi_, grad_Pi_, hess_Pi_ = \
+            predefined_Pis[prior]
+
+        #be sure that the Pi function is not None
+        assert Pi_ is not None
+
+        #initialize others Pi functions
+        grad_Pi = None
+        hess_Pi = None
+
+        #consider specific_parameters
+        Pi = lambda theta : Pi_(theta,**specific_parameters)
+        if grad_Pi_ is not None:
+            grad_Pi = lambda theta : \
+                    grad_Pi_(theta,**specific_parameters)
+        if hess_Pi_ is not None:
+            hess_Pi = lambda theta : \
+                    hess_Pi_(theta,**specific_parameters)
+        
+        #use other method
+        self.set_prior(Pi=Pi, grad_Pi=grad_Pi, hess_Pi=hess_Pi, iid = iid)
+
+    def set_prior(self,Pi = None, grad_Pi = None, hess_Pi = None, iid = False):
+        """
+        →
+        """
+        #π
+        self.Pi = Pi
+        #∇π
+        if grad_Pi is None:
+            self.grad_Pi = (lambda t: auto_grad_Pi(self.Pi,t))
+        else:
+            self.grad_Pi = grad_Pi
+        #Hπ
+        if hess_Pi is None:
+            self.hess_Pi = (lambda t: auto_hess_Pi(self.Pi,t))
+        else:
+            self.hess_Pi = hess_Pi
+    
+        #iid parameter
+        self.prior_iid = iid
+        
+        #remember this method is called, to prevent errors
+        self.set_prior_is_called = True
 
 
     def init_with(self, mu_0 = 0, cov_0 = 1):
@@ -491,10 +542,16 @@ class Graph:
                                       function = "Bullseye_graph.set_options()")
             else:
                 setattr(self, key, kwargs[key])
+            
+            if self.backtracking_degree==0.5:
+                assert self.local_std_trick
+            if self.compute_gamma:
+                assert self.local_std_trick
 
         #inform the user when some of these options are not compatible
         #→
         if self.keep_1d_prior:
+            #→
             if "compute_prior_kernel" in list(kwargs):
                 warn_useless_parameter("computed_prior_kernel", "keep_1d_prior",
                                     function = "Bullseye_graph.set_options()")
@@ -518,7 +575,7 @@ class Graph:
         #remember this method is called, to prevent errors
         self.build_is_called = True
 
-    def run(self, n_iter = 10, run_id = None, X = None, Y = None, save = False,
+    def run(self, n_iter = 10, run_id = None, X = None, Y = None,
         debug_array = None):
         """
         →debug
@@ -535,9 +592,6 @@ class Graph:
             Allows the end user to specify a X if it hasn't been yet
         Y : np.array [None, k], optional
             Allows the end user to specify a Y if it hasn't been yet
-        save : bool, optional
-            Assert whether the results will be saved in the working directory or
-            not
 
         Returns
         ------
@@ -590,8 +644,8 @@ class Graph:
                 print_subtitle("epoch number {}".format(epoch))
                 #---->start epoch
                 self.saver.start_epoch()
-
-                #compute new_mu, new_cov and optionaly more
+                
+                #update new_mu, new_cov and optionaly more
                 self.__run(sess, ops["update_new_parameters"],
                                     **run_kwargs)
 
@@ -599,7 +653,6 @@ class Graph:
                     #read chunks, and update global e, rho and beta
                     # in consequence
                     self.set_globals_from_chunks(sess, run_kwargs=run_kwargs)
-
 
                 #debug array-----
                 if debug_array is not None:
@@ -628,13 +681,13 @@ class Graph:
                 sess.run([ops["mu"], ops["cov"], ops["ELBO"]])
 
             #save
-            if save:
-                self.saver.save_final_results(mu=final_mu, cov=final_cov)
+            self.saver.save_final_results(mu=final_mu, cov=final_cov)
 
         print_end("end of the run")
 
         #set the return dictionnary
         r =  {'mu':final_mu, 'cov':final_cov,'elbo':final_elbo}
+        #add to the dictionnary what is saved by the saver
         r.update(self.saver.final_stats())
         return r
 
