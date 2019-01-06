@@ -134,7 +134,7 @@ def construct_bullseye_graph(G):
                                        dtype = tf.float32)
     else:
         new_cov_sqrt = None
-
+    
     if G.comp_opt is "cholesky":
         beta_chol = tf.linalg.cholesky(beta)
         beta_sqrt = tf.transpose(beta_chol)
@@ -186,8 +186,7 @@ def construct_bullseye_graph(G):
         new_cov_sqrt_ = gamma*(cov_max_sqrt) \
                         + (1-gamma) * new_cov_sqrt
         new_cov_ = new_cov_sqrt_ @ tf.transpose(new_cov_sqrt_)
-
-
+    
     if G.comp_opt=="cholesky":
         #new_cov sqrt may already be calculated, see above
         if new_cov_sqrt_ is None:
@@ -204,7 +203,10 @@ def construct_bullseye_graph(G):
     
     new_mu_  = mu - step_size * tf.einsum('ij,j->i', beta_inv, rho)
 
-    update_new_cov = tf.assign(new_cov, new_cov_)
+    if not G.diag_cov:
+        update_new_cov = tf.assign(new_cov, new_cov_)
+    else:
+        update_new_cov = tf.assign(new_cov, tf.diag(tf.linalg.diag_part(new_cov_)))
     update_new_mu = tf.assign(new_mu, new_mu_)
     update_new_logdet = tf.assign(new_logdet, new_logdet_)
 
@@ -244,12 +246,9 @@ def construct_bullseye_graph(G):
 
 
     #PRIO TRIPLET
-    #for readability
-    ptargs = [new_mu,new_cov,new_cov_sqrt,z_hermite,weights_hermite]
-    #if not batched
+    ptargs = [new_mu,new_cov,new_cov_sqrt]
     computed_e_prior, computed_rho_prior, computed_beta_prior =\
         prior_triplet(G, *ptargs)
-
     tf.identity(computed_e_prior, name = "computed_e_prior")
     tf.identity(computed_rho_prior, name = "computed_rho_prior")
     tf.identity(computed_beta_prior, name = "computed_beta_prior")
@@ -284,7 +283,7 @@ def construct_bullseye_graph(G):
                         global_beta + computed_beta + computed_beta_prior)
 
 
-        #chunk as list : the sum will be computed outside of the graph
+        #chunk as list
         else:
             global_e = []
             global_rho = []
@@ -380,8 +379,7 @@ def construct_bullseye_graph(G):
         with tf.control_dependencies([update_e, update_rho, update_beta,
                                      update_cov, update_mu, update_ELBO,
                                      update_step_size]):
-            return [tf.assign(status, bcolors.OKGREEN+"accepted"+bcolors.ENDC),
-                new_ELBO, ELBO]
+            return [tf.assign(status, "accepted"), new_ELBO, ELBO]
 
     """
     REFUSED UPDATE
@@ -391,14 +389,13 @@ def construct_bullseye_graph(G):
                                 step_size*G.step_size)
         #status_to_refused = tf.assign(status, "refused")
         with tf.control_dependencies([decrease_step_size]):
-            return [tf.assign(status, bcolors.FAIL+"refused"+bcolors.ENDC),
-                new_ELBO, ELBO]
+            return [tf.assign(status, "refused"), new_ELBO, ELBO]
 
     """
     ITERATIONS
     """
 
-    if G.eigmin_condition:
+    if False:
         #the eigmin_condition requests that eigmin(βⁿ⁺¹) > ½·eigmin(βⁿ)
         #note that:
         #   eigmin(βⁿ⁺¹) = min(new_cov_S⁻¹) = max(new_cov_S)⁻¹

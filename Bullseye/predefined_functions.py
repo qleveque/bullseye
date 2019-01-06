@@ -41,10 +41,6 @@ def compute_p_multilogit(d,k):
     return d*k
 compute_ps["multilogit"] = compute_p_multilogit
 
-def compute_p_LM_sigma(d,k):
-    return d+1
-compute_ps["LM_sigma"] = compute_p_LM_sigma
-
 def compute_p_LM(d,k):
     return d
 compute_ps["LM"] = compute_p_LM
@@ -96,30 +92,43 @@ def Psi_multilogit(X,Y,theta):
     """
     k = Y.shape.as_list()[1]
     d = X.shape.as_list()[1]
+    theta_matrix = tf.transpose(tf.reshape(theta, [k,d]))
+    A = tf.matmul(X,theta_matrix)
+    P=Softmax_probabilities(A)
+    s = -tf.log(tf.einsum('nk,nk->n',Y,P))
+    r = tf.reduce_sum(s, axis=0)
+    return r
+
+def grad_Psi_multilogit(X,Y,theta):
+    k = Y.shape.as_list()[1]
+    d = X.shape.as_list()[1]
+    theta_matrix = tf.transpose(tf.reshape(theta, [k,d]))
+    A = tf.matmul(X,theta_matrix)
+    P=Softmax_probabilities(A)
+    r = tf.transpose(Y-P)@X
+    return -tf.reshape(r,[d*k])
+
+def hess_Psi_multilogit(X,Y,theta):
+    k = Y.shape.as_list()[1]
+    d = X.shape.as_list()[1]
     theta_matrix = tf.reshape(theta, [d,k])
     A = tf.matmul(X,theta_matrix)
-    return tf.reduce_sum(Phi_multilogit(A,Y), axis=0)
-predefined_Psis["multilogit"] = [Psi_multilogit, None, None]
+    P = Softmax_probabilities(A)
+    P_eq = -tf.einsum('ia,ib->abi',P,tf.ones_like(P)-P)
+    P_neq = tf.einsum('ia,ib->abi',P,P)
+    #class -> a,b
+    I = tf.eye(k)
+    I_ = tf.ones([k,k])-tf.eye(k)
+    big_P = tf.einsum('ab,abi->abi',I,P_eq)\
+        + tf.einsum('ab,abi->abi',I_,P_neq)
+    H = tf.einsum('ik,abi,il->akbl',X,big_P,X)
+    H_ = tf.reshape(H,[d*k,d*k])
+    return -H_
 
-def Psi_LM_sigma(X,Y,theta):
-    """
-    ψ(X,Y,Θ) = ψ(X,Y,β,σ) = 0.5·n·[log(2π) + log(σ²)] + 0.5 * 1/σ² ∑ᵢ(Yᵢ-Xᵢβ)²
-    """
-    #size of the sample
-    n = tf.cast(tf.shape(X)[0],tf.float32)
-    d = X.shape.as_list()[1]
-    
-    #split θ into β and σ
-    beta, sigma= tf.split(theta, [d,1])
-    
-    #e
-    e = tf.square(tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,beta))
-    
-    #compute the log likelihood
-    log_likelihood = -0.5*n*(tf.log(2*math.pi)+tf.log(tf.square(sigma))) \
-                - 0.5 * 1/tf.square(sigma)* tf.reduce_sum(e)
-    return -tf.squeeze(log_likelihood)
-predefined_Psis["LM_sigma"]=[Psi_LM_sigma, None, None]
+
+predefined_Psis["multilogit_without_hess"] = [Psi_multilogit, grad_Psi_multilogit,None]
+predefined_Psis["multilogit"] = [Psi_multilogit, grad_Psi_multilogit,hess_Psi_multilogit]
+predefined_Psis["multilogit_simple"] = [Psi_multilogit, None,None]
 
 def Psi_LM(X,Y,theta):
     """
@@ -127,84 +136,37 @@ def Psi_LM(X,Y,theta):
     """
     #size of the sample
     n = tf.cast(tf.shape(X)[0],tf.float32)
-    #split θ into β and σ
-    beta = theta
     #e
-    e = tf.square(tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,beta))
+    e = tf.square(tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,theta))
     #compute the log likelihood
     log_likelihood = -0.5*n*tf.log(2*math.pi) - 0.5*tf.reduce_sum(e)
     return -log_likelihood
 
 def grad_Psi_LM(X,Y,theta):
     """
-    ψ(X,Y,Θ) = ψ(X,Y,β) = 0.5·n·log(2π) + 0.5 • ∑ᵢ(Yᵢ-Xᵢβ)²
+    ∂ψ(X,Y,β)/∂βⱼ = Xⱼ•(Y-X•β)^T
     """
-    #β
-    beta = theta
     #e
-    e = tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,beta)
+    e = tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,theta)
     #compute the grad log likelihood
     grad_log_likelihood = tf.einsum('ij,i->j',X,e)
     return -grad_log_likelihood
 
 def hess_Psi_LM(X,Y,theta):
     """
-    ψ(X,Y,Θ) = ψ(X,Y,β) = 0.5·n·log(2π) + 0.5 • ∑ᵢ(Yᵢ-Xᵢβ)²
+    ∂ψ(X,Y,β)/∂βⱼ∂βₙ = -Xⱼ•Xₙ
     """
     #compute the hess log likelihood
     hess_log_likelihood = -tf.einsum('ji,jk->ik',X,X)
     return -hess_log_likelihood
 
-predefined_Psis["LM"]=[Psi_LM, None, None]
+predefined_Psis["LM_simple"]=[Psi_LM, None, None]
+predefined_Psis["LM_without_hess"] = [Psi_LM, grad_Psi_LM, None]
+predefined_Psis["LM"]=[Psi_LM, grad_Psi_LM, hess_Psi_LM]
 
 def Psi_CNN(X,Y,theta,conv_sizes,pools):
-    #size of the sample
-    n = tf.shape(X)[0]
-    #image width/height
-    c = int(math.sqrt(X.shape.as_list()[1]))
-
-    #reshape X into multiple squared arrays
-    X_reshaped = tf.reshape(X, [n,c,c])
-
-    #add channel layer
-    image = tf.expand_dims(X_reshaped,3)
     k = Y.shape.as_list()[1]
-
-    #size of the final flatten list
-    flatten_size = int(c/np.prod(pools))**2
-
-    #split theta accordingly to the convolution filters
-    how_to_split_theta = []
-    for i in range(len(conv_sizes)):
-        how_to_split_theta += [conv_sizes[i]**2, 1]
-
-    #for final logistic regression
-    how_to_split_theta += [flatten_size*k, k]
-
-    #finally split theta
-    theta_splits = tf.split(theta, how_to_split_theta)
-
-    for i in range(len(conv_sizes)):
-        #retrieve current W and b
-        W = theta_splits[2*i]
-        b = theta_splits[2*i + 1]
-
-        #apply the convolutions and the max pools
-        image = apply_conv(image,W,b)
-        image = apply_max_pool(image,pools[i])
-
-    #flatten
-    flat = tf.layers.Flatten()(image) # of size [n, flatten_size]
-
-    #log multilogit on what remains and as we compute the log,
-    # we don't use exp
-    W = tf.reshape(theta_splits[-2],[flatten_size,k])
-    b = theta_splits[-1]
-    #compute scores
-    Scores = tf.expand_dims(b,0) + flat@W
-
-    #compute probabilities from Scores
-    P=Softmax_probabilities(Scores)
+    P = Probabilities_CNN(X,k,theta,conv_sizes,pools)
     return -tf.reduce_sum(tf.log(tf.einsum('nk,nk->n',Y,P)),0)
 predefined_Psis["CNN"] = [Psi_CNN, None, None]
 
@@ -265,7 +227,6 @@ def grad_Pi_normal_iid(theta, mu = 0, sigma = 1):
     return -l
 def hess_Pi_normal_iid(theta, mu = 0, sigma = 1):
     #ensures each variable is float
-    mu = tf.to_float(mu)
     sigma = tf.to_float(sigma)
     #compute
     l = - 1/tf.square(sigma)
@@ -273,7 +234,8 @@ def hess_Pi_normal_iid(theta, mu = 0, sigma = 1):
     I = tf.eye(p)
     return -l*I
 
-predefined_Pis["normal_iid"] = [Pi_normal_iid, grad_Pi_normal_iid, hess_Pi_normal_iid]
+predefined_Pis["normal_iid"] = [Pi_normal_iid, grad_Pi_normal_iid,
+                                hess_Pi_normal_iid, True]
 
 #===============================================================================
 
@@ -309,6 +271,31 @@ or
     [n,k,k]:
         Hϕ(A)
 """
+"""
+LM
+"""
+def Phi_LM(A,Y):
+    """
+    ψ(X,Y,Θ) = ψ(X,Y,β) = ∑ᵢ 0.5·(log(2π) + (Yᵢ-Xᵢβ)²)
+    """
+    #e
+    e = tf.square(tf.squeeze(Y,1) - tf.squeeze(A,1))
+    #φ(Xᵢ,β) = 0.5·(log(2π) + (Yᵢ-Xᵢβ)²)
+    phi = 0.5 * (tf.log(2*math.pi) * tf.ones_like(e) + e)
+    return phi
+
+def grad_Phi_LM(A,Y):
+    grad_phi = - (Y - A)
+    return grad_phi
+
+def hess_Phi_LM(A,Y):
+    hess_phi = tf.expand_dims(tf.ones_like(A),2)
+    return hess_phi
+
+predefined_Phis["LM_simple"] = [Phi_LM, None, None]
+predefined_Phis["LM_without_hess"] = [Phi_LM, grad_Phi_LM, None]
+predefined_Phis["LM"] = [Phi_LM, grad_Phi_LM, hess_Phi_LM]
+predefined_Phis["LM_spe"] = [Phi_LM, None, hess_Phi_LM]
 
 """
 MULTILOGIT
@@ -325,25 +312,10 @@ def hess_Phi_multilogit(A,Y):
     return tf.einsum('nk,kj->nkj', P,
                     tf.eye(k)) - tf.einsum('ni,nj->nij',P,P)
 
-predefined_Phis["multilogit"] = [Phi_multilogit,
-                    grad_Phi_multilogit,
-                    hess_Phi_multilogit]
-
-#aut_grad
-def Phi_multilogit_aut_grad(A,Y):
-    return -tf.log(tf.einsum('nk,nk->n', Y,
-                            Softmax_probabilities(A)))
-def grad_Phi_multilogit_aut_grad(A,Y):
-    return tf.gradients(Phi_multilogit(A,Y),A)[0]
-def hess_Phi_multilogit_aut_grad(A,Y):
-    k = Y.get_shape().as_list()[-1]
-    P=Softmax_probabilities(A)
-    return tf.einsum('nk,kj->nkj',P,
-                    tf.eye(k)) - tf.einsum('ni,nj->nij',P,P)
-
-predefined_Phis["multilogit_aut_grad"] = [Phi_multilogit_aut_grad,
-                    grad_Phi_multilogit_aut_grad,
-                    hess_Phi_multilogit_aut_grad]
+predefined_Phis["multilogit"] = [Phi_multilogit, grad_Phi_multilogit,hess_Phi_multilogit]
+predefined_Phis["multilogit_without_hess"] = [Phi_multilogit, grad_Phi_multilogit,None]
+predefined_Phis["multilogit_spe"] = [Phi_multilogit, None,hess_Phi_multilogit]
+predefined_Phis["multilogit_simple"] = [Phi_multilogit, None, None]
 
 #mapfn_opt
 def Phi_multilogit_mapfn_opt(A,Y):
@@ -441,3 +413,7 @@ def Proj_multilogit_mapfn(X, d, k):
     return tf.map_fn(lambda x: proj_multilogit(x,d,k), X)
 
 predefined_Projs["multilogit_mapfn"] = Proj_multilogit_mapfn
+
+def Proj_LM(X,d,k):
+    return tf.expand_dims(X,2)
+predefined_Projs["LM"] = Proj_LM

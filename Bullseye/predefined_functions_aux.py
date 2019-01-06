@@ -15,6 +15,57 @@ from .predefined_functions import *
 """
 CNN
 """
+def Probabilities_CNN(X,k,theta,conv_sizes,pools):
+    #size of the sample
+    n = tf.shape(X)[0]
+    #image width/height
+    c = int(math.sqrt(X.shape.as_list()[1]))
+
+    #reshape X into multiple squared arrays
+    X_reshaped = tf.reshape(X, [n,c,c])
+
+    #add channel layer
+    images = [tf.expand_dims(X_reshaped,3)]
+
+    #size of the final flatten list
+    flatten_size = int(c/np.prod(pools))**2
+
+    #split theta accordingly to the convolution filters
+    how_to_split_theta = []
+    for i in range(len(conv_sizes)):
+        how_to_split_theta += [conv_sizes[i]**2, 1]
+
+    #for final logistic regression
+    how_to_split_theta += [flatten_size*k, k]
+
+    #finally split theta
+    theta_splits = tf.split(theta, how_to_split_theta)
+    
+    W = [None]*len(conv_sizes)
+    b = [None]*len(conv_sizes)
+    
+    for i in range(len(conv_sizes)):
+        #retrieve current W and b
+        W[i] = theta_splits[2*i]
+        b[i] = theta_splits[2*i + 1]
+
+        #apply the convolutions and the max pools
+        images.append(apply_conv(images[-1],W[i],b[i]))
+        images.append(apply_max_pool(images[-1],pools[i]))
+
+    #flatten
+    flat = tf.layers.Flatten()(images[-1]) # of size [n, flatten_size]
+
+    #log multilogit on what remains and as we compute the log,
+    # we don't use exp
+    W_ = tf.reshape(theta_splits[-2],[flatten_size,k])
+    b_ = theta_splits[-1]
+    #compute scores
+    Scores = tf.expand_dims(b_,0) + flat@W_
+
+    #compute probabilities from Scores
+    P=Softmax_probabilities(Scores)
+    return P
 
 def apply_conv(X,W,b):
     w = int(math.sqrt(W.shape.as_list()[0]))

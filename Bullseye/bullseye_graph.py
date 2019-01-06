@@ -145,16 +145,16 @@ class Graph:
                 "backtracking_degree"       : 1,
                 #if need to transform the vector into one_hot when reading files
                 "to_one_hot"                : False,
-                #eigmin condition on the new beta
-                "eigmin_condition"          : False,
                 #comp_opt
                 "comp_opt"                  : "cholesky",
                 #compute_gamma : equation to ensure positive semi-definite
                 "compute_gamma"             : False,
                 #autograd
-                "compute_grad"              : "std",
+                "compute_grad"              : "tf",
                 #autohess
-                "compute_hess"              : "std"    
+                "compute_hess"              : "tf",
+                #diag cov
+                "diag_cov"                  : False
                 }
 
         #keep in mind the name of those options
@@ -169,6 +169,7 @@ class Graph:
         #attributes that ensure the correct construction of the graph
         self.feed_with_is_called = False
         self.set_model_is_called = False
+        self.set_prior_is_called = False
         self.init_with_is_called = False
         self.build_is_called = False
 
@@ -319,14 +320,25 @@ class Graph:
 
             #get the Phis
             Phi_, grad_Phi_, hess_Phi_ = predefined_Phis[suffix_phi]
+            
+            #be sure that the Psi function is not None
+            assert Phi_ is not None
+
+            #initialize Psi functions
+            grad_Phi = None
+            hess_Phi = None
+            
             #consider specific_parameters
             Phi = lambda A,Y : Phi_(A,Y,**specific_parameters)
-            grad_Phi = lambda A,Y : grad_Phi_(A,Y,**specific_parameters)
-            hess_Phi = lambda A,Y : hess_Phi_(A,Y,**specific_parameters)
+            if grad_Phi_ is not None:
+                grad_Phi = lambda A,Y : grad_Phi_(A,Y,**specific_parameters)
+            if hess_Phi_ is not None:
+                hess_Phi = lambda A,Y : hess_Phi_(A,Y,**specific_parameters)
 
             #get proj
             Proj = predefined_Projs[suffix_proj]
-
+            assert Proj is not None
+            
             #use other method
             self.set_model(Phi=Phi, grad_Phi=grad_Phi, hess_Phi=hess_Phi,
                 Proj=Proj, p=p)
@@ -340,7 +352,7 @@ class Graph:
             if psi_option is not None:
                 suffix_psi += "_"+psi_option
 
-            #get the Phis
+            #get the Psis
             Psi_, grad_Psi_, hess_Psi_ = \
                 predefined_Psis[suffix_psi]
 
@@ -390,18 +402,20 @@ class Graph:
         #method 1
         if Psi is not None:
             self.use_projs = False
+            assert Psi is not None
             #ψ
             self.Psi = Psi
             #∇ψ
-            if grad_Psi is None:
-                self.grad_Psi = (lambda x,y,t: auto_grad_Psi(self.Psi,x,y,t))
-            else:
-                self.grad_Psi = grad_Psi
+            self.grad_Psi = grad_Psi
+            if grad_Psi is None and self.compute_grad=="tf":
+                self.grad_Psi = lambda X,Y,theta : \
+                    tf.gradients(self.Psi(X,Y,theta),theta)[0]
             #Hψ
-            if hess_Psi is None:
-                self.hess_Psi = (lambda x,y,t: auto_hess_Psi(self.Psi,x,y,t))
-            else:
-                self.hess_Psi = hess_Psi
+            self.hess_Psi = hess_Psi
+            if hess_Psi is None and self.compute_hess=="tf":
+                #self.hess_Psi = lambda A:tf.gradients(grad_Psi(A[0],A[1],A[2]),A[2])[0]
+                self.hess_Psi = lambda X,Y,theta : \
+                    tf.hessians(self.Psi(X,Y,theta),theta)[0]
         #method 2
         else:
             self.use_projs = True
@@ -410,15 +424,12 @@ class Graph:
             #ϕ
             self.Phi = Phi
             #∇ϕ
-            if grad_Phi is None:
-                self.grad_Phi = (lambda a,y: auto_grad_Phi(self.Phi,a,y))
-            else:
-                self.grad_Phi = grad_Phi
+            self.grad_Phi = grad_Phi
+            if grad_Phi is None and self.compute_grad=="tf":
+                self.grad_Phi = lambda A, Y:tf.gradients(self.Phi(A,Y),A)[0]
             #Hϕ
-            if hess_Phi is None:
-                self.hess_Phi = (lambda a,y: auto_hess_Phi(self.Phi,a,y))
-            else:
-                self.hess_Phi = hess_Phi
+            #impossible to use tf hessians
+            self.hess_Phi = hess_Phi
 
             #A
             self.Proj = Proj
@@ -440,13 +451,12 @@ class Graph:
         #remember this method is called, to prevent errors
         self.set_model_is_called = True
 
-    def set_predefined_prior(self, prior, iid = False,
-        **specific_parameters):
+    def set_predefined_prior(self, prior, **specific_parameters):
         """
         →
         """
         #get the π's
-        Pi_, grad_Pi_, hess_Pi_ = \
+        Pi_, grad_Pi_, hess_Pi_, iid = \
             predefined_Pis[prior]
 
         #be sure that the Pi function is not None
@@ -455,7 +465,6 @@ class Graph:
         #initialize others Pi functions
         grad_Pi = None
         hess_Pi = None
-
         #consider specific_parameters
         Pi = lambda theta : Pi_(theta,**specific_parameters)
         if grad_Pi_ is not None:
@@ -468,22 +477,20 @@ class Graph:
         #use other method
         self.set_prior(Pi=Pi, grad_Pi=grad_Pi, hess_Pi=hess_Pi, iid = iid)
 
-    def set_prior(self,Pi = None, grad_Pi = None, hess_Pi = None, iid = False):
+    def set_prior(self,Pi, grad_Pi = None, hess_Pi = None, iid = False):
         """
         →
         """
         #π
         self.Pi = Pi
         #∇π
-        if grad_Pi is None:
-            self.grad_Pi = (lambda t: auto_grad_Pi(self.Pi,t))
-        else:
-            self.grad_Pi = grad_Pi
+        self.grad_Pi = grad_Pi
+        if grad_Pi is None and self.compute_grad=="tf":
+            self.grad_Pi = lambda theta:tf.gradients(Pi(theta),theta)[0]
         #Hπ
-        if hess_Pi is None:
-            self.hess_Pi = (lambda t: auto_hess_Pi(self.Pi,t))
-        else:
-            self.hess_Pi = hess_Pi
+        self.hess_Pi = hess_Pi
+        if hess_Pi is None and self.compute_grad=="tf":
+            self.hess_Pi = lambda theta:tf.hessians(Pi(theta),theta)[0]
     
         #iid parameter
         self.prior_iid = iid
@@ -567,7 +574,7 @@ class Graph:
         #to prevent error, ensures ``feed_with``, ``set_model`` and
         #``init_with`` methods have been called
         assert self.feed_with_is_called and self.set_model_is_called \
-            and self.init_with_is_called
+            and self.init_with_is_called and self.set_prior_is_called
 
         #construct the graph
         self.graph, self.in_graph = construct_bullseye_graph(self)
@@ -638,7 +645,6 @@ class Graph:
         with tf.Session(graph = self.graph) as sess:
             #initialize the graph
             sess.run(ops["init"],**run_kwargs)
-
             #starting iterations
             for epoch in range(n_iter):
                 print_subtitle("epoch number {}".format(epoch))
@@ -653,15 +659,14 @@ class Graph:
                     #read chunks, and update global e, rho and beta
                     # in consequence
                     self.set_globals_from_chunks(sess, run_kwargs=run_kwargs)
-
                 #debug array-----
                 if debug_array is not None:
-                    ans = self.__run(sess,[ops[op] for op in debug_array])
+                    ans = self.__run(sess,[ops[op] for op in debug_array],
+                                     **run_kwargs)
                     for idx,an in enumerate(ans):
                         print(debug_array[idx])
                         print(an)
                 #----------------
-
                 #compute new elbo
                 statu, elbo, best_elbo = \
                     self.__run(sess, ops["iteration"],
@@ -674,7 +679,10 @@ class Graph:
                     mu, cov = sess.run([ops["mu"], ops["cov"]])
                     self.saver.save_step(mu,cov,epoch)
 
-                print('{statu}, with {elbo}'.format(statu = statu, elbo = elbo))
+                b = bcolors.OKGREEN if statu=="accepted" else bcolors.FAIL
+                print('{b}{statu}{e}, with {elbo}'.format(statu = statu, elbo = elbo,
+                                                          e = bcolors.ENDC,
+                                                          b = b))
 
             #get the lasts mu, cov, elbo
             final_mu, final_cov, final_elbo = \
@@ -716,9 +724,9 @@ class Graph:
 
         if self.saver is not None:
             self.saver.before_run()
-
+            
         d = sess.run(ops_to_compute,feed_dict = feed_dict, **run_kwargs)
-
+        
         if self.saver is not None:
             self.saver.after_run(run_kwargs)
         return d
@@ -738,7 +746,6 @@ class Graph:
 
         #for simplicity
         ops = self.in_graph
-
         #initialize global e, rho and beta
         self.__run(sess,ops["init_globals"],**run_kwargs)
 
@@ -754,7 +761,7 @@ class Graph:
                 #if the number of chunk to consider has been reached, we break
                 if not i<self.nb_of_chunks:
                     break
-
+                
                 #decode data
                 data = np.asarray(chunk)
                 #handle X and Y
@@ -804,4 +811,4 @@ class Graph:
             self.__run(sess,ops["update_globals"][i], feed_dict = dict,
                     **run_kwargs)
 
-        print("Chunk number {} done.".format(i))
+        print("Chunk number {} done.".format(i))        

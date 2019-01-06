@@ -9,6 +9,8 @@ import numpy as np
 import struct
 import sys
 import tensorflow as tf
+import pandas as pd
+
 try:
     from StringIO import StringIO
 except ImportError:
@@ -17,6 +19,7 @@ except ImportError:
 def partition_list(l, n):
     for i in range(0, len(l), n):
         yield l[i:i+n]
+        
 
 def softmax_probabilities(z):
     """
@@ -30,45 +33,64 @@ def softmax_probabilities(z):
     #unnormalized probabilities
     P = np.exp(z)
     return P/np.sum(P)
-
-def generate_multilogit(d,n,k, file = None):
+    
+def mu_to_theta_multilogit(mu,k):
+    d = int(mu.shape[0]/k)
+    theta_hat = np.ndarray.reshape(mu, (k,d)).T
+    #theta_hat = np.ndarray.reshape(mu,(d,k))
+    return theta_hat
+    
+def evaluate_multilogit_results(theta_0, mu):
+    d, k = theta_0.shape
+    theta_hat = mu_to_theta_multilogit(mu,k)
+    par = {'axis': 1, 'keepdims' : True}
+    theta_hat_r = theta_hat - np.max(theta_hat, **par) \
+            + np.max(theta_0, **par)
+    e = theta_0 - theta_hat_r
+    print("theta_0")
+    print(theta_0)
+    print("theta_hat")
+    print(theta_hat_r)
+    print("error")
+    print(e)
+    print("norm of the error")
+    print(np.linalg.norm(e))
+    
+def generate_multilogit(d,n,k):
     """
-    generate softmax data
-
-    Keyword arguments:
-        d -- dimension of θ for one class
-        n -- number of observations
-        k -- number of class for softmax
+    →
     """
-
     p=d*k
-
-    #the θᵢ's related to class k will be in i_[k]
-    i_ = list(partition_list(range(p), d))
-
     #create θ₀ matrix (with k class in d dimensions)
-    theta_0 = np.float32( 0.3 * np.random.randn(k,d) / (k*d)**0.5 )
-    #flatten θ₀
-    theta_0 = np.ndarray.flatten(theta_0)
-
+    theta_0 = np.random.randn(d,k)/(k*d)**0.5
     #random design matrix
     x_array = np.random.randn(n,d)
     #intercepts
-    x_array[:,0] = 1
+    x_array[:,0] = 1.
     #compute scores
-    scores = np.transpose([x_array@theta_0[i] for i in i_]) #TODO
-
+    scores = x_array@theta_0
     #compute probs
     probs = [softmax_probabilities(score) for score in scores]
     #generate labels
     y_array = np.asarray([np.random.multinomial(1,prob) for prob in probs])
 
-    if file is not None:
-        y_flat = np.expand_dims(from_one_hot(y_array), 1)
-        to_write = np.hstack((y_flat,x_array))
-        np.savetxt(file, to_write, delimiter=",", fmt='% 1.3f')
+    return theta_0, x_array, y_array.astype(np.float32)
 
-    return theta_0, x_array.astype(np.float32), y_array.astype(np.float32)
+def generate_lm(d,n):
+    theta_0 = np.random.uniform(low=1.0, high=2.0,size = [d])
+    
+    #random design matrix
+    x_array = np.random.uniform(size = [n,d])
+    #intercepts
+    x_array[:,0] = 1.
+    #compute scores
+    scores = x_array@theta_0
+    #normal error
+    e = np.random.normal(scale = 0.2,size = [n])
+    #y_array
+    y_array = x_array@theta_0 + e
+    
+    return theta_0, x_array, y_array
 
 def cartesian_coord(*arrays):
     """

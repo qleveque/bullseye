@@ -48,12 +48,111 @@ def likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
     """
     pars = [G,X,Y,new_mu,new_cov,new_cov_sqrt]
     if G.use_projs :
-        return soft_likelihood_triplet(*pars)
+        return proj_likelihood_triplet(*pars)
     else:
         return brutal_likelihood_triplet(*pars)
 
-def prior_triplet(G,new_mu,new_cov,new_cov_sqrt,
-                  z_prior,weights_hermite):
+"""
+OVERLOADS
+"""
+
+def brutal_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
+    """
+    Overload function of ``likelihood_triplet``.
+    Is called when we don't consider the projections of the parameters in the
+    bullseye algorithm.
+    """
+    if tf.shape(X)[0] == 0 or tf.shape(Y)[0]==0:
+        return tf.zeros([]), tf.zeros([G.p]), tf.zeros([G.p,G.p])
+
+    #sample s realisations of Zᵢ~𝒩(0,1)
+    z, z_weights = generate_sampling_tf(G.s, G.p)
+
+    #from sample z, compute the corresponding activations :
+    # thetas[j] = θⱼ = μ+σ·zⱼ           of size [s,n,k]
+    # θⱼ is a realisation of θ~𝒩(μ,Σ)
+    thetas = tf.expand_dims(new_mu,0)\
+                + tf.einsum('pk,sp->sk', new_cov_sqrt,z,
+                            name = 'einsum_in_activations')
+    
+    #activate the function with the computed activations:
+    #compute:
+    # psi[j]=ψ(θⱼ)                   of size [s]
+    # grad_psi[j]=∇ψ(θⱼ)             of size [s,k]
+    # hess_psi[j]=Hψ(θⱼ)             of size [s,k,k]
+    psi, grad_psi, hess_psi = compute_psis(G,X,Y,thetas,new_mu,new_cov)
+    
+    #compute the real parameters:
+    #computed_e = e* = ∑ⱼ wⱼ·ψ(θⱼ) ≈ 𝔼[ψ(θⱼ)]              of size []
+    #computed_rho = ρ* = ∑ⱼ wⱼ·∇ψ(θⱼ) ≈ 𝔼[∇ψ(θⱼ)]          of size [k]
+    #computed_beta = β = ∑ⱼ wⱼ·Hψ(θⱼ) ≈ 𝔼[Hψ(θⱼ)]          of size [k,k]
+    computed_e = tf.einsum('s,s->',z_weights, psi)
+    computed_rho = tf.einsum('s,sk->k',z_weights, grad_psi)
+    computed_beta = tf.einsum('s,skj->kj',z_weights, hess_psi)
+
+    return relocalize(G,computed_e, computed_rho, computed_beta, new_mu)
+
+def proj_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
+    if tf.shape(X)[0] == 0 or tf.shape(Y)[0]==0:
+        return tf.zeros([]), tf.zeros([G.p]), tf.zeros([G.p,G.p])
+    """
+    Overload function of ``likelihood_triplet``.
+    Is called when we consider the projections of the parameters in the bullseye
+    algorithm.
+    """
+    #consider i, ∀i ∈〚1,n〛
+
+    #compute projection arrays:
+    # A_array[i] = Aᵢ               of size [p,k]
+    # A_array_kernel[i] = [A^T·A]ᵢ
+    #note that A_array_kernel may not be computed, depending on the options of G
+    A_array, A_array_kernel = aux_A_arrays(G,X)
+
+    #compute local parameters, in other terms describe how behaves Aᵢ·θ:
+    # local_mu[i]=μᵢ
+    # local_std[i]=√Σᵢ
+    local_mu, local_std, local_cov = aux_local_parameters(G, A_array, A_array_kernel,
+                                               new_mu, new_cov, new_cov_sqrt)
+    
+    #sample s realisations of Zᵢ~𝒩(0,1)
+    l=G.p if not G.local_std_trick else G.k
+    z, z_weights = generate_sampling_tf(G.s, l)
+
+    #from sample z, compute the corresponding activations :
+    # Activations[j,i] = Aᵢθⱼ = = μᵢ+√Σᵢzⱼ       of size [s,l,k]
+    Activations = tf.expand_dims(local_mu,0) +\
+                  tf.einsum('npk,sp->snk', local_std,z,
+                            name = 'einsum_in_activations')
+
+    #activate the functions with the computed activations
+    #compute :
+    #→
+    # phi[j,i] = ϕ(Aᵢθⱼ) = φᵢ(θⱼ),                  of size [s,n]
+    # grad_phi[j,i] = ∇ϕ(Aᵢθⱼ) = ∇φᵢ(θⱼ)            of size [s,n,k]
+    # hess_phi[j,i] = Hϕ(Aᵢθⱼ) = Hφᵢ(θⱼ)            of size [s,n,k,k]
+    phi, grad_phi, hess_phi = \
+        compute_phis(G,Activations,Y,local_mu, local_std, local_cov)
+    
+    #compute the parameters e, r and B :
+    # local_e[i] = ∑ⱼ wⱼ·ϕᵢ(Aᵢzⱼ) ≈ 𝔼[ϕᵢ(Aᵢθ)] = eᵢ      of size [n]
+    # local_r[i] = ∑ⱼ wⱼ·∇ϕᵢ(Aᵢzⱼ) ≈ 𝔼[∇ϕᵢ(Aᵢθ)] = rᵢ    of size [n,k]
+    # local_B[i] = ∑ⱼ wⱼ·Hϕᵢ(Aᵢzⱼ) ≈ 𝔼[Hϕᵢ(Aᵢθ)] = Bᵢ    of size [n,k,k]
+    local_e = tf.einsum('s,sn->n',z_weights, phi)
+    local_r = tf.einsum('s,snk->nk',z_weights, grad_phi)
+    local_B = tf.einsum('s,snkj->nkj',z_weights, hess_phi)
+
+    #finally compute the real parameters :
+    # computed_e = e* = ∑ᵢ eᵢ                           of size []
+    # computed_rho = ρ* = ∑ᵢ Aᵢ·rᵢ = ∑ᵢ ρᵢ              of size [p]
+    # computed_beta = β = ∑ᵢ (Aᵢ^T)·Bᵢ·Aᵢ = ∑ᵢ βᵢ       of size[p,p]
+    computed_e = tf.reduce_sum(local_e, name="computed_e_l")
+    computed_rho  = tf.einsum('npk,nk->p', A_array, local_r,
+                              name = 'computed_rho_l')
+    computed_beta = aux_compute_beta(G, A_array_kernel, A_array, local_B)
+    
+    return relocalize(G,computed_e, computed_rho, computed_beta, new_mu)
+
+def prior_triplet(G,new_mu,new_cov,new_cov_sqrt):
     """
     Describes the part of the tensorflow graph related to the computation of e,
     ρ and β for the prior.
@@ -83,128 +182,6 @@ def prior_triplet(G,new_mu,new_cov,new_cov_sqrt,
         Computed β for the prior given X,Y.
 
     """
-    pars = [G,new_mu,new_cov,new_cov_sqrt,z_prior,weights_hermite]
-    
-    #if G.prior_std is not None:
-        #return iid_normal_prior_triplet(*pars)
-    #else:
-    
-    return brutal_prior_triplet(*pars)
-
-"""
-OVERLOADS
-"""
-
-def brutal_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
-    """
-    Overload function of ``likelihood_triplet``.
-    Is called when we don't consider the projections of the parameters in the
-    bullseye algorithm.
-    """
-    if tf.shape(X)[0] == 0 or tf.shape(Y)[0]==0:
-        return tf.zeros([]), tf.zeros([G.p]), tf.zeros([G.p,G.p])
-
-    #sample s realisations of Zᵢ~𝒩(0,1)
-    z, z_weights = generate_sampling_tf(G.s, G.p)
-
-    #from sample z, compute the corresponding activations :
-    # thetas[j] = θⱼ = μ+σ·zⱼ           of size [s,n,k]
-    # θⱼ is a realisation of θ~𝒩(μ,Σ)
-    thetas = tf.expand_dims(new_mu,0)\
-                + tf.einsum('pk,sp->sk', new_cov_sqrt,z,
-                            name = 'einsum_in_activations')
-
-    #activate the function with the computed activations:
-    #compute:
-    # psi[j]=ψ(θⱼ)                   of size [s]
-    psi = tf.map_fn(lambda theta: G.Psi(X, Y, theta), thetas,
-                        dtype=tf.float32)
-    
-    # grad_psi[j]=∇ψ(θⱼ)             of size [s,k]
-    gf = lambda theta: G.grad_Psi(X, Y, theta)
-    grad_psi = compute_grad(G, gf, thetas, new_mu, new_cov, psi)
-    
-    # hess_psi[j]=Hψ(θⱼ)             of size [s,k,k]
-    hf = lambda theta: G.hess_Psi(X,Y, theta)
-    hess_psi = compute_hess(G, hf, thetas, new_mu, new_cov, psi, grad_psi)
-    
-    #compute the real parameters:
-    #computed_e = e* = ∑ⱼ wⱼ·ψ(θⱼ) ≈ 𝔼[ψ(θⱼ)]              of size []
-    #computed_rho = ρ* = ∑ⱼ wⱼ·∇ψ(θⱼ) ≈ 𝔼[∇ψ(θⱼ)]          of size [k]
-    #computed_beta = β = ∑ⱼ wⱼ·Hψ(θⱼ) ≈ 𝔼[Hψ(θⱼ)]          of size [k,k]
-    computed_e = tf.einsum('s,s->',z_weights, psi)
-    computed_rho = tf.einsum('s,sk->k',z_weights, grad_psi)
-    computed_beta = tf.einsum('s,skj->kj',z_weights, hess_psi)
-
-    return relocalize(G,computed_e, computed_rho, computed_beta, new_mu)
-
-def soft_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
-    if tf.shape(X)[0] == 0 or tf.shape(Y)[0]==0:
-        return tf.zeros([]), tf.zeros([G.p]), tf.zeros([G.p,G.p])
-    """
-    Overload function of ``likelihood_triplet``.
-    Is called when we consider the projections of the parameters in the bullseye
-    algorithm.
-    """
-    #consider i, ∀i ∈〚1,n〛
-
-    #compute projection arrays:
-    # A_array[i] = Aᵢ
-    # A_array_kernel[i] = [A^T·A]ᵢ
-    #note that A_array_kernel may not be computed, depending on the options of G
-    A_array, A_array_kernel = aux_A_arrays(G,X)
-
-    #compute local parameters, in other terms describe how behaves Aᵢ·θ:
-    # local_mu[i]=μᵢ
-    # local_std[i]=σᵢ
-    local_mu, local_std = aux_local_parameters(G, A_array, A_array_kernel,
-                                               new_mu, new_cov, new_cov_sqrt)
-    
-    #sample s realisations of Zᵢ~𝒩(0,1)
-    l=G.p if not G.local_std_trick else G.k
-    z, z_weights = generate_sampling_tf(G.s, l)
-
-    #from sample z, compute the corresponding activations :
-    # Activations[j,i] = aᵢ = μᵢ+σᵢzⱼ       of size [s,l,k]
-    Activations = tf.expand_dims(local_mu,0) +\
-                  tf.einsum('npk,sp->snk', local_std,z,
-                            name = 'einsum_in_activations')
-
-    #activate the functions with the computed activations
-    #compute :
-    # phi[j,i]=ϕᵢ(Aᵢzⱼ),            of size [s,n]
-    # grad_phi[j,i]=∇ϕᵢ(Aᵢzⱼ)       of size [s,n,k]
-    # hess_phi[j,i]=Hϕᵢ(Aᵢzⱼ)       of size [s,n,k,k]
-    phi, grad_phi, hess_phi = aux_activate_functions(G,Activations,Y)
-
-    #compute the parameters e, r and B :
-    # local_e[i] = ∑ⱼ wⱼ·ϕᵢ(Aᵢzⱼ) ≈ 𝔼[ϕᵢ(Aᵢθ)] = eᵢ      of size [n]
-    # local_r[i] = ∑ⱼ wⱼ·∇ϕᵢ(Aᵢzⱼ) ≈ 𝔼[∇ϕᵢ(Aᵢθ)] = rᵢ    of size [n,k]
-    # local_B[i] = ∑ⱼ wⱼ·Hϕᵢ(Aᵢzⱼ) ≈ 𝔼[Hϕᵢ(Aᵢθ)] = Bᵢ    of size [n,k,k]
-    local_e = tf.einsum('s,sn->n',z_weights, phi)
-    local_r = tf.einsum('s,snk->nk',z_weights, grad_phi)
-    local_B = tf.einsum('s,snkj->nkj',z_weights, hess_phi)
-
-    #finally compute the real parameters :
-    # computed_e = e* = ∑ᵢ eᵢ                           of size []
-    # computed_rho = ρ* = ∑ᵢ Aᵢ·rᵢ = ∑ᵢ ρᵢ              of size [p]
-    # computed_beta = β = ∑ᵢ (Aᵢ^T)·Bᵢ·Aᵢ = ∑ᵢ βᵢ       of size[p,p]
-    computed_e = tf.reduce_sum(local_e, name="computed_e_l")
-    computed_rho  = tf.einsum('npk,nk->p', A_array, local_r,
-                              name = 'computed_rho_l')
-    computed_beta = aux_compute_beta(G, A_array_kernel, A_array, local_B)
-    
-    return relocalize(G,computed_e, computed_rho, computed_beta, new_mu)
-
-def brutal_prior_triplet(G,new_mu,new_cov,new_cov_sqrt,
-                        z_hermite,weights_hermite):
-    """
-    WILL CHANGE IN FUTURE VERSIONS →
-    so i don't take the time to comment, code it in another way
-    """
-
-    #→ with gaussian hermite
-    #sample s realisations of Zᵢ~𝒩(0,1)
     
     l=G.p if not G.prior_iid else 1
     
@@ -226,8 +203,7 @@ def brutal_prior_triplet(G,new_mu,new_cov,new_cov_sqrt,
         new_cov_diag_sqrt = tf.sqrt(tf.linalg.diag_part(new_cov))
         thetas = tf.expand_dims(new_mu,0)\
                     + tf.einsum('p,sp->sp', new_cov_diag_sqrt,z)
-            
-            
+    
     #recall we have Activations of size [s_q,p].
     #compute:
     # pi[j]=π(aⱼ)                       of size [s_q]
@@ -239,54 +215,12 @@ def brutal_prior_triplet(G,new_mu,new_cov,new_cov_sqrt,
             dtype=tf.float32)
     hess_pi = tf.map_fn(G.hess_Pi, thetas,
             dtype=tf.float32)
-
     # computed_e_l[i] = ∑ⱼ wⱼ·π(aⱼ) ≈ 𝔼[π(θ)] = e*_π             of size []
     # computed_rho_l[i] = ∑ⱼ wⱼ·∇π(Aᵢzⱼ) ≈ 𝔼[∇π(θ)] = ρ*_π       of size [p]
     # computed_beta_l[i] = ∑ⱼ wⱼ·Hπ(Aᵢzⱼ) ≈ 𝔼[Hπ(θ)] = β_π       of size [p,p]
     computed_e_l = tf.einsum('s,s->', z_weights, pi)
     computed_rho_l = tf.einsum('s,sk->k', z_weights, grad_pi)
     computed_beta = tf.einsum('s,skj->kj', z_weights, hess_pi)
-        
-    return relocalize(G,computed_e_l, computed_rho_l, computed_beta, new_mu)
-
-def soft_prior_triplet(G,new_mu,new_cov,
-                        z_hermite,weights_hermite):
-    """
-    WILL CHANGE IN FUTURE VERSIONS →
-    IID
-    """
-
-    #→ with gaussian hermite
-    #sample s realisations of Zᵢ~𝒩(0,1)
-    z, z_weights = generate_sampling_tf(G.s, 1)
-
-    #from sample z, compute the corresponding activations :
-    # We suppose that the θᵢ are iid.
-    # thetas[i][j] = θᵢⱼ = μⱼ+zᵢ•√Σⱼⱼ           of size [s_q,p]
-    # aⱼ is a realisation of θ~𝒩(μ,Σ)
-    new_cov_diag_sqrt = tf.sqrt(tf.linalg.diag_part(new_cov))
-    thetas = tf.expand_dims(new_mu,0)\
-                + tf.einsum('p,sp->sp', new_cov_diag_sqrt,z)
-            
-    #recall we have Activations of size [s_q,p].
-    #compute:
-    # pi[j]=π(aⱼ)                       of size [s_q]
-    # grad_pi[j]=∇π(aⱼ)                 of size [s_q,p]
-    # hess_pi[j]=Hπ(aⱼ)                 of size [s_q,p,p]
-    pi = tf.map_fn(lambda theta : G.Pi(theta), thetas,
-            dtype=tf.float32)
-    grad_pi = tf.map_fn(G.grad_Pi, thetas,
-            dtype=tf.float32)
-    hess_pi = tf.map_fn(G.hess_Pi, thetas,
-            dtype=tf.float32)
-
-    # computed_e_l[i] = ∑ⱼ wⱼ·π(aⱼ) ≈ 𝔼[π(θ)] = e*_π             of size []
-    # computed_rho_l[i] = ∑ⱼ wⱼ·∇π(Aᵢzⱼ) ≈ 𝔼[∇π(θ)] = ρ*_π       of size [p]
-    # computed_beta_l[i] = ∑ⱼ wⱼ·Hπ(Aᵢzⱼ) ≈ 𝔼[Hπ(θ)] = β_π       of size [p,p]
-    computed_e_l = tf.einsum('s,s->', z_weights, pi)
-    computed_rho_l = tf.einsum('s,sk->k', z_weights, grad_pi)
-    computed_beta = tf.einsum('s,skj->kj', z_weights, hess_pi)
-        
     return relocalize(G,computed_e_l, computed_rho_l, computed_beta, new_mu)
 
 def relocalize(G, e_l, rho_l, beta, mu):
@@ -382,28 +316,20 @@ def aux_local_parameters(G,A_array,A_array_kernel,new_mu,new_cov,new_cov_sqrt):
         sd[Aᵢ·θ]=√Var[Aᵢ·θ]
     """
     #compute local_mu:
-    # local_mu[i] = μᵢ = Aᵢ·μ               of size [k]
+    # local_mu[i] = μᵢ = Aᵢ·μ               of size [n,k]
     local_mu = tf.einsum('iba,b->ia',A_array, new_mu,
                           name = 'einsum_local_mu') #[n,k]
 
     #compute local_std
     # local_std[i] = σᵢ = √Var[Aᵢ·θ]
     if not G.local_std_trick:
-        #local std trick, using new_cov_sqrt, no use of A_array_kernel
-
+        #using new_cov_sqrt, no use of A_array_kernel
+        local_cov = None
         #compute:
         # local_std = σᵢ = √Σ·Aᵢ        of size [n,p,k]
-        if G.use_einsum:
-            local_std = tf.einsum('pq,nqk->npk', new_cov_sqrt, A_array,
-                                   name = 'einsum_std_trick')
-        else:
-            local_std = tf.transpose(
-                                    tf.tensordot(new_cov_sqrt,
-                                                 A_array,[[1],[1]],
-                                                 name = "tensordot_std_trick"),
-                                    [1,0,2])
+        local_std = tf.einsum('pq,nqk->npk', new_cov_sqrt, A_array,
+                                name = 'einsum_std_trick')
     else:
-        #in this case, no std trick, so we compute local_cov, and then local_std
         # local_std[i] = √local_cov[i] = √(Aᵢ·Σ·(Aᵢ^T))
         if G.compute_kernel:
             local_cov = tf.einsum('npkql,pq->nkl', A_array_kernel, new_cov,
@@ -414,74 +340,72 @@ def aux_local_parameters(G,A_array,A_array_kernel,new_mu,new_cov,new_cov_sqrt):
         local_std_T = tf.linalg.cholesky(local_cov)
         local_std = tf.transpose(local_std_T, perm=[0, 2, 1])
 
-    return local_mu, local_std
+    return local_mu, local_std, local_cov
 
-def aux_activate_psi_functions(G, Activations, Y):
-    """
-    →→→
-    Compute the activated functions ψ(a), ∇ψ(a), Hψ(a), ∀a ∈ Activations.
-    """
-    #using flatten Activations
-    if G.flatten_activations:
-        s,_,k = A.get_shape().as_list()
-        n = tf.shape(A)[1]
-        #flatten data
-        Activations_flat = tf.reshape(Activations, [s*n,k])
-        Y_flat = tf.tile(Y, (s,1))
-
-        #compute flatten activated functions
-        #recall we have Activations of size [s×n]
-        #compute:
-        # phi[j]=ψ(aⱼ)                          of size [s×n]
-        # grad_phi[j]=∇ψ(aⱼ)                    of size [s×n,k]
-        # hess_phi[j]=Hψ(aⱼ)                    of size [s×n,k,k]
-        psi_flat = G.Psi(Activations_flat, Y_flat) #[s*n]
-        grad_psi_flat = G.grad_Psi(Activations_flat, Y_flat) #[s*n,k]
-        hess_psi_flat = G.hess_Psi(Activations_flat, Y_flat) #[s*n,k,k]
-
-        #unflatten data
-        psi = tf.reshape(phi_flat, [s,n])
-        grad_psi = tf.reshape(grad_phi_flat, [s,n,k])
-        hess_psi = tf.reshape(hess_phi_flat, [s,n,k,k])
-
-    #using map_fn
-    else:
-        #recall we have Activations of size [s,n].
-        #compute:
-        # phi[j,i]=ψ(aⱼᵢ)                       of size [s,n]
-        # grad_phi[j,i]=∇ψ(aⱼᵢ)                 of size [s,n,k]
-        # hess_phi[j,i]=Hψ(aⱼᵢ)                 of size [s,n,k,k]
-        psi = tf.map_fn(lambda a: G.Psi(a, Y), Activations,
-            dtype=tf.float32)
-        grad_psi = tf.map_fn(lambda a: G.grad_Psi(a, Y), Activations,
-            dtype=tf.float32)
-        hess_psi = tf.map_fn(lambda a: G.hess_Psi(a, Y), Activations,
-            dtype=tf.float32)
-
-    return phi, grad_phi, hess_phi
-
-def aux_activate_functions(G, Activations, Y):
+def compute_phis(G, Activations, Y, local_mu, local_std, local_cov):
     """
     Compute the activated functions ϕ(a), ∇ϕ(a), Hϕ(a), ∀a ∈ Activations.
     """
+    s,_,k = Activations.get_shape().as_list()
+    n = tf.shape(Activations)[1]
+        
+    #Y
+    if G.flatten_activations :
+        Y_ = tf.tile(Y, (s,1))
+    else:
+        Y_ = Y
+    
+    #φ
+    Phi_ = lambda a : G.Phi(a,Y_)
+    
+    #∇φ
+    grad_Phi_ = None
+    if G.grad_Phi is not None:
+        grad_Phi_ = lambda a: G.grad_Phi(a,Y_)
+        
+    #Hφ
+    #impossible to compute from tf
+    hess_Phi_ = None
+    if G.hess_Phi is not None:
+        hess_Phi_ = lambda a : G.hess_Phi(a,Y_)
+        
+    #if an approximation is required, we need w
+    approx_needed = grad_Phi_ is None or hess_Phi_ is None
+    if approx_needed:
+        if local_cov is None:
+            #local_cov[i] = Σᵢ= S^T•S                   of size [n,k,k]
+            local_cov = tf.einsum('nji,njk->nik',local_std,local_std)
+        #cov_inv[i] = Σᵢ⁻¹                   of size [n,k,k]
+        cov_inv = tf.linalg.inv(local_cov)
+        #v[j,i] = Aᵢθⱼ-μᵢ                  of size [s,n,k]
+        v = Activations - tf.expand_dims(local_mu,0)
+        #w[j,i] = Σᵢ⁻¹(Aᵢθⱼ-μᵢ) = Σᵢ⁻¹•v[j,i]  of size [s,n,k]
+        w = tf.einsum('npq,snq->snp',cov_inv,v)
+    
     #using flatten Activations
     if G.flatten_activations:
-        s,_,k = A.get_shape().as_list()
-        n = tf.shape(A)[1]
         #flatten data
         Activations_flat = tf.reshape(Activations, [s*n,k])
-        Y_flat = tf.tile(Y, (s,1))
-
+        if approx_needed:
+            w_flat = tf.reshape(w, [s*n,k])
         #compute flatten activated functions
         #recall we have Activations of size [s×n]
         #compute:
         # phi[j]=ϕ(aⱼ)                          of size [s×n]
+        phi_flat = Phi_(Activations_flat)
+        
         # grad_phi[j]=∇ϕ(aⱼ)                    of size [s×n,k]
+        if grad_Phi_ is not None:
+            grad_phi_flat = grad_Phi_(Activations_flat)
+        else:
+            grad_phi_flat = grad_approx(G, w_flat, phi_flat)
+        
         # hess_phi[j]=Hϕ(aⱼ)                    of size [s×n,k,k]
-        phi_flat = G.Phi(Activations_flat, Y_flat) #[s*n]
-        grad_phi_flat = G.grad_Phi(Activations_flat, Y_flat) #[s*n,k]
-        hess_phi_flat = G.hess_Phi(Activations_flat, Y_flat) #[s*n,k,k]
-
+        if hess_Phi_ is not None:
+            hess_phi_flat = hess_Phi_(Activations_flat)
+        else:
+            hess_phi_flat = hess_approx(G, w_flat, phi_flat, grad_phi_flat)
+        
         #unflatten data
         phi = tf.reshape(phi_flat, [s,n])
         grad_phi = tf.reshape(grad_phi_flat, [s,n,k])
@@ -489,19 +413,83 @@ def aux_activate_functions(G, Activations, Y):
 
     #using map_fn
     else:
-        #recall we have Activations of size [s,n].
+        #recall we have Activations of size [s,l,k].
         #compute:
-        # phi[j,i]=ϕ(aⱼᵢ)                       of size [s,n]
-        # grad_phi[j,i]=∇ϕ(aⱼᵢ)                 of size [s,n,k]
-        # hess_phi[j,i]=Hϕ(aⱼᵢ)                 of size [s,n,k,k]
-        phi = tf.map_fn(lambda a: G.Phi(a, Y), Activations,
-            dtype=tf.float32)
-        grad_phi = tf.map_fn(lambda a: G.grad_Phi(a, Y), Activations,
-            dtype=tf.float32)
-        hess_phi = tf.map_fn(lambda a: G.hess_Phi(a, Y), Activations,
-            dtype=tf.float32)
-
+        # phi[j,i]=ϕ(Aᵢθⱼ)                       of size [s,n]
+        phi = tf.map_fn(Phi_, Activations, dtype=tf.float32)
+        
+        # grad_phi[j,i]=∇ϕ(Aᵢθⱼ)                 of size [s,n,k]
+        if grad_Phi_ is not None:
+            grad_phi = tf.map_fn(grad_Phi_, Activations, dtype=tf.float32)
+        else:
+            grad_phi = tf.map_fn(lambda A : grad_approx(G, A[0], A[1]), [w,phi], dtype=tf.float32)
+        
+        # hess_phi[j,i]=Hϕ(Aᵢθⱼ)                 of size [s,n,k,k]
+        if hess_Phi_ is not None:
+            hess_phi = tf.map_fn(hess_Phi_, Activations, dtype=tf.float32)
+        else:
+            hess_phi = tf.map_fn(lambda A : hess_approx(G, A[0], A[1],A[2]), [w,phi,grad_phi], dtype=tf.float32)
+        
     return phi, grad_phi, hess_phi
+
+def compute_psis(G, X, Y, thetas, mu, cov):
+    grad_psi = None
+    hess_psi = None
+    
+    #ψ
+    psi = tf.map_fn(lambda t: G.Psi(X, Y, t), thetas,
+                        dtype=tf.float32)
+    #∇ψ
+    if G.grad_Psi is not None:
+        gp = lambda t: G.grad_Psi(X,Y,t)
+        grad_psi = tf.map_fn(gp, thetas, dtype=tf.float32)
+        
+    #Hψ
+    if G.hess_Psi is not None:
+        hp = lambda t: G.hess_Psi(X,Y,t)
+        hess_psi = tf.map_fn(hp, thetas, dtype=tf.float32)
+        #if both are computed
+        if grad_psi is not None:
+            return psi, grad_psi, hess_psi
+    
+    #APPROXIMATIONS
+    
+    #cov_inv = Σ⁻¹                  of size [p,p]
+    cov_inv = tf.linalg.inv(cov)
+    #v[i] = θᵢ-μ                  of size [s,p]
+    v = thetas - tf.expand_dims(mu,0)
+    #w[i] = Σ⁻¹(θᵢ-μ) = Σ⁻¹•v[i]  of size [s,p,p]
+    w = tf.einsum('pq,sq->sp',cov_inv,v)
+    
+    if grad_psi is None:
+        grad_psi = grad_approx(G,w,psi)
+    if hess_psi is None :
+        hess_psi = hess_approx(G,w,psi,grad_psi)
+        
+    return psi, grad_psi, hess_psi
+    
+def grad_approx(G,w,act):
+    #using the activations previously computed
+    grad = tf.einsum('n,np->np',act,w)
+    return grad
+    
+def hess_approx(G,w,act,grad):
+    if G.compute_hess in ["grad","tf"]:
+        #using the gradient previously computed
+        #Hƒ(θ)[i] = Sym(∇ƒ(θ)(θ-μᵢ)^T Σᵢ⁻¹)
+        #         = Sym(∇ƒ(θ)•wᵢ^T)
+        outer = tf.einsum('np,nq->npq',grad,w)    
+        return Sym(outer)
+    
+    else : #G.compute_hess == "act":
+        #using the activations of f previously computed
+        #Hƒ(θ)[i] = 0.5•ƒ(θ)(Σ⁻¹(θ-μᵢ)(θ-μᵢ)^T Σᵢ⁻¹ - I)
+        #         = 0.5•ƒ(θ)(w[i]•w[i]^T - I)
+        outer = tf.einsum('np,nq->npq', w, w)
+        I = tf.expand_dims(tf.eye(G.k),0)
+        inside = 0.5 * (outer - I)
+        r = tf.einsum('i,ijk->ijk',act,inside)
+        return r
 
 def aux_compute_beta(G, A_array_kernel, A_array, local_B):
     """
@@ -524,36 +512,21 @@ AUTO GRAD HESS
 """
 
 def auto_grad_Psi(Psi,X,Y,theta):
-    #→
     return tf.gradients(Psi(X,Y,theta),theta)[0]
 
 def auto_hess_Psi(Psi,X,Y,theta):
-    #→
-    #J = auto_grad_Psi(Psi,X,Y,theta)
-    #return hess_from_grad(J)
     return tf.hessians(Psi(X,Y,theta),theta)[0]
 
 def auto_grad_Phi(Phi,A,Y):
-    #→
-    return tf.gradients(Phi(A,Y),theta)[0]
+    return tf.gradients(Phi(A,Y),A)[0]
 
-def auto_hess_Phi(Phi,A,Y):
-    #→
-    #J = auto_grad_Phi(Psi,X,Y,theta)
-    #return hess_from_grad(J)
-    return tf.hessians(Phi(A,Y),theta)[0]
+#auto_hess_Phi impossible to compute
 
 def auto_grad_Pi(Pi,theta):
-    #→
     return tf.gradients(Pi(theta),theta)[0]
 
 def auto_hess_Pi(Pi,theta):
-    #→
-    #J = auto_grad_Phi(Pi,theta)
-    #return hess_from_grad(J)
     return tf.hessians(Pi(theta),theta)[0]
-
-
 
 def hess_from_grad(grad):
     return tf.tensordot(grad,grad,axes=0)
@@ -561,26 +534,6 @@ def hess_from_grad(grad):
 """
 AUTO HESS
 """
-
-def compute_grad(G, f, thetas, mu, cov, act):
-    """
-    Compute the gradients of the function f given its sample thetas.
-    """
-    if G.compute_grad == "std":
-        return tf.map_fn(f, thetas, dtype=tf.float32)
-    
-    #cov_inv = Σ⁻¹                  of size [p,p]
-    #to improve
-    cov_inv = tf.linalg.inv(cov)
-    #v[i] = θ[i]-μ                  of size [s,p]
-    v = thetas - tf.expand_dims(mu, 0)
-    #w[i] = Σ⁻¹(θ[i]-μ) = Σ⁻¹•v[i]  of size [s,p]
-    w = tf.einsum('pq,sq->sp',cov_inv,v)
-    
-    if G.compute_grad == "approx":
-        #using an approximation using the activations of f
-        outer = tf.einsum('s,sq->sq',act,w)
-        return outer
 
 def compute_hess(G, f, thetas, mu, cov, act, grad):
     """

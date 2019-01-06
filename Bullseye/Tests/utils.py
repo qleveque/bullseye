@@ -6,10 +6,10 @@ from Bullseye.warning_handler import *
 
 bullseye_tests_dir = "from_Bullseye_tests"
 
-def handle_fig(title):
+def handle_fig(name):
     if not os.path.isdir(bullseye_tests_dir):
         os.mkdir(bullseye_tests_dir)
-    image_path = os.path.join(bullseye_tests_dir,title+'.png')
+    image_path = os.path.join(bullseye_tests_dir,name+'.png')
     plt.savefig(image_path)
     open_file(image_path)
     plt.clf()
