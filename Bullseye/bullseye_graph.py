@@ -79,7 +79,7 @@ class Graph:
             "graph","in_graph",
             #data related
             "d","k","p","X","Y",
-            "file","chunksize","nb_of_chunks",
+            "file","m","M","to_one_hot",
             #init related
             "mu_0","cov_0",
             #φ's, ψ's and projections related
@@ -97,7 +97,7 @@ class Graph:
         #→ think about putting these options in the __init__ parameters
         options = {
                 #if brutal iteration, the ELBO will be updated even if it
-                #decreases
+                # decreases
                 "brutal_iteration"          : False,
                 #default speed of the algorithm, γ will start with this value
                 "speed"                     : 1,
@@ -113,28 +113,15 @@ class Graph:
                 #when computing the local variances, compute the square roots
                 # one by one
                 "local_std_trick"           : True,
-                #number of batches for the likelihood
-                "m"                         : 0,
                 #when computing ABA^T, compute the kernels H=AA^T for fast
-                #computations of ABA^T, but exponential space is required
-                "compute_kernel"            : False,
-                #same as compute_kernel, but for the prior
-                "compute_prior_kernel"      : False,
+                # computations of ABA^T, but exponential space is required
+                "compute_kernel"            : False, #todo
                 #when streaming a file, if chunk_as_sum is true, does not
                 # keep track of the different values of eᵢ,ρᵢ,βᵢ in order
                 # to save space
-                "chunk_as_sum"              : True,
-                #when prior covariance is diagonal, prevents the use of
-                # exponential space and improves speed
-                "keep_1d_prior"             : True,
-                #use the natural value of eᵢ,ρᵢ,βᵢ centered in 0
-                "natural_param"             : False,
-                #make the run silent or not
-                "silent"                    : True,
+                "chunk_as_sum"              : True, #todo
                 #when streaming through a file, use tensorflow dataset class
-                "tf_dataset"                : False,
-                #use einsum or dot_product when multiplying big matrices
-                "use_einsum"                : True,
+                "tf_dataset"                : False, #todo
                 #include timeliner in saved informations
                 "timeliner"                 : False,
                 #include tf profiler in saved informations,
@@ -143,8 +130,6 @@ class Graph:
                 "keep_track"                : True,
                 #backtracking degree
                 "backtracking_degree"       : 1,
-                #if need to transform the vector into one_hot when reading files
-                "to_one_hot"                : False,
                 #comp_opt
                 "comp_opt"                  : "cholesky",
                 #compute_gamma : equation to ensure positive semi-definite
@@ -153,7 +138,7 @@ class Graph:
                 "compute_grad"              : "tf",
                 #autohess
                 "compute_hess"              : "tf",
-                #diag cov
+                #diag_cov
                 "diag_cov"                  : False
                 }
 
@@ -174,7 +159,7 @@ class Graph:
         self.build_is_called = False
 
     def feed_with(self, X = None, Y = None, d = None, k = None,
-        file = None, chunksize = None, number_of_chunk_max = None):
+        file = None, m = None, M = None, to_one_hot = False):
         """
         Feed the graph with data. There are multiple ways of doing so.
 
@@ -187,6 +172,8 @@ class Graph:
         Method 3: requires file, chunksize and k
             To stream a file.
 
+        →
+
         Parameters
         ----------
         X : np.array [None,d]
@@ -197,8 +184,6 @@ class Graph:
             d
         k : int
             k
-        prior_std : int, np.array[p] or np.array [p,p]
-            Prior std matrix. Can also be a vector or a int if it is diagonal.
         file : string
             Path of the file to stream (.csv format).
         chunksize : int
@@ -206,7 +191,9 @@ class Graph:
         number_of_chunk_max : int
             Number of chunk to consider per iterations.
         """
-
+        
+        self.to_one_hot = to_one_hot
+        
         #method 1
         if X is not None or Y is not None:
             assert X is not None
@@ -224,6 +211,7 @@ class Graph:
             self.Y = Y
             self.d = X.shape[-1]
             self.k = Y.shape[-1]
+            self.m = None
 
         #method 2
         elif file is None:
@@ -233,6 +221,7 @@ class Graph:
 
             self.d = d
             self.k = k
+            self.m = None
 
         #method 3
         else:
@@ -250,23 +239,26 @@ class Graph:
             for chunk in reader:
                 data = list(chunk.shape)
                 break
-            self.d = data[-1]-1
+            if to_one_hot:
+                self.d = data[-1]-1
+            else:
+                self.d = data[-1]-k
 
             #deduce n
             #→ not a perfect method to assert n
             n = sum(1 for line in open(file))
 
-            if chunksize is not None:
-                assert type(chunksize)==int
-                self.chunksize = chunksize
+            if m is not None:
+                assert type(m)==int
+                self.m = m
             else:
-                self.chunksize = n
+                self.m = n
 
             #deduce number_of_chunk_max
-            if number_of_chunk_max is not None:
-                self.nb_of_chunks = number_of_chunk_max
+            if M is not None:
+                self.M = M
             else:
-                self.nb_of_chunks = math.ceil(n/self.chunksize)
+                self.M = math.ceil(n/self.m)
 
         #remember this method is called to ensure consistency and prevent errors
         self.feed_with_is_called = True
@@ -516,7 +508,6 @@ class Graph:
         elif len(mu_0.shape) == 1:
             assert list(mu_0.shape) == [self.p]
             self.mu_0 = mu_0
-
         #handle Σ₀
         if type(cov_0) in [float, int]:
             self.cov_0 = cov_0 * np.eye(self.p)
@@ -557,12 +548,13 @@ class Graph:
 
         #inform the user when some of these options are not compatible
         #→
-        if self.keep_1d_prior:
+        """if self.keep_1d_prior:
             #→
             if "compute_prior_kernel" in list(kwargs):
                 warn_useless_parameter("computed_prior_kernel", "keep_1d_prior",
                                     function = "Bullseye_graph.set_options()")
             self.compute_prior_kernel = False
+        """
 
     def build(self):
         """
@@ -658,7 +650,7 @@ class Graph:
                 if self.file is not None:
                     #read chunks, and update global e, rho and beta
                     # in consequence
-                    self.set_globals_from_chunks(sess, run_kwargs=run_kwargs)
+                    self.set_partials_from_chunks(sess, run_kwargs=run_kwargs)
                 #debug array-----
                 if debug_array is not None:
                     ans = self.__run(sess,[ops[op] for op in debug_array],
@@ -731,7 +723,7 @@ class Graph:
             self.saver.after_run(run_kwargs)
         return d
 
-    def set_globals_from_chunks(self, sess, run_kwargs):
+    def set_partials_from_chunks(self, sess, run_kwargs):
         """
         Compute global_e, global_rho and global_beta while streaming through the
         file.
@@ -747,19 +739,19 @@ class Graph:
         #for simplicity
         ops = self.in_graph
         #initialize global e, rho and beta
-        self.__run(sess,ops["init_globals"],**run_kwargs)
+        self.__run(sess,ops["init_chunks"],**run_kwargs)
 
         #create a pandas reader to stream the file
         if not self.tf_dataset:
             reader = pd.read_table(self.file,
                                    sep = ",",
-                                   chunksize = self.chunksize)
+                                   chunksize = self.m)
 
             #start streaming
             for (i,chunk) in enumerate(reader):
 
                 #if the number of chunk to consider has been reached, we break
-                if not i<self.nb_of_chunks:
+                if not i<self.M:
                     break
                 
                 #decode data
@@ -776,14 +768,14 @@ class Graph:
                 d_ = {"X:0" : X, "Y:0" : Y}
 
                 #update the global parameters
-                self.run_globals_update(sess, i, run_kwargs=run_kwargs, dict=d_)
+                self.run_partials_update(sess, i, run_kwargs=run_kwargs, dict=d_)
 
         #else, create a tf.dataset reader to stream the file
         else:
-            for i in range(self.nb_of_chunks):
-                self.run_globals_update(sess, i, run_kwargs=run_kwargs)
+            for i in range(self.M):
+                self.run_partials_update(sess, i, run_kwargs=run_kwargs)
 
-    def run_globals_update(self, sess, i, run_kwargs, dict={}):
+    def run_partials_update(self, sess, i, run_kwargs, dict={}):
         """
         Update global_e, global_rho and global_beta with a given chunk.
 
@@ -803,12 +795,12 @@ class Graph:
 
         #add to e,ρ and β the current eᵢ,ρᵢ and βᵢ
         if self.chunk_as_sum:
-            self.__run(sess,ops["update_globals"], feed_dict = dict,
+            self.__run(sess,ops["update_partials"], feed_dict = dict,
                     **run_kwargs)
 
         #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
         else:
-            self.__run(sess,ops["update_globals"][i], feed_dict = dict,
+            self.__run(sess,ops["update_partials"][i], feed_dict = dict,
                     **run_kwargs)
 
         print("Chunk number {} done.".format(i))        

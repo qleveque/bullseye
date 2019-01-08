@@ -49,18 +49,19 @@ def construct_bullseye_graph(G):
     #X, Y related
     #always put Y as a [n,k] tensor
     if G.X is None and G.Y is None:
-        if not G.tf_dataset:
+        if not G.tf_dataset: #placeholders of file with pandas
             X = tf.placeholder(tf.float32, name='X', shape = [None, d])
             Y = tf.placeholder(tf.float32, name='Y', shape = [None, k])
-        else:
+        elif G.file is not None: #file with tf.file
             filenames = [G.file]
-            record_defaults = [tf.float32] * (d+1)
+            record_defaults = [tf.float32] * (d+k)
             dataset = tf.data.experimental.CsvDataset(filenames,record_defaults)
-            batched_dataset = dataset.batch(G.chunksize)
+            batched_dataset = dataset.batch(G.m)
             iterator = batched_dataset.make_initializable_iterator()
 
             it_next = iterator.get_next()
-
+            
+            #not that nice...
             if not G.to_one_hot:
                 #→ to change, not that nice
                 X = tf.transpose(tf.convert_to_tensor(it_next[k:(d+k)]))
@@ -70,25 +71,13 @@ def construct_bullseye_graph(G):
                 X = tf.transpose(tf.convert_to_tensor(it_next[1:(d+1)]))
                 Y = tf.one_hot(tf.cast(read_Y, 'int32'), k)
     else:
-        X = tf.get_variable("X", G.X.shape,initializer = tic(G.X),
-                            dtype = tf.float32)
-        Y = tf.get_variable("Y",G.Y.shape,initializer = tic(G.Y),
-                            dtype = tf.float32)
+        if G.m is None:
+            X = tf.get_variable("X", G.X.shape,initializer = tic(G.X),
+                                dtype = tf.float32)
+            Y = tf.get_variable("Y",G.Y.shape,initializer = tic(G.Y),
+                                dtype = tf.float32)
+                
 
-    #prior_std related
-    """
-    →
-    if G.keep_1d_prior:
-        prior_std = tf.get_variable("prior_std",
-                        [p],
-                        initializer = tic(np.diag(G.prior_std)),
-                        dtype = tf.float32)
-    else:
-        prior_std = tf.get_variable("prior_std",
-                        G.prior_std.shape,
-                        initializer = tic(G.prior_std),
-                        dtype = tf.float32)
-    """
 
     #status
     status = tf.get_variable("status",[], initializer = tf.zeros_initializer,
@@ -171,38 +160,13 @@ def construct_bullseye_graph(G):
         K_eigmin = tf.reduce_min(K_eig)
         gamma = (eig_limitation - 1)/(K_eigmin -1)
     #backtracking
-    if G.backtracking_degree==-1:
-        # Σⁿ⁺¹ = (γ·(Σₘ)⁻¹ + (1-γ)·(Σⁿ)⁻¹)⁻¹
-        new_cov_=tf.linalg.inv(gamma * cov_max_inv \
-                               + (1-gamma) * tf.linalg.inv(cov))
-        new_cov_sqrt_ = None
-    elif G.backtracking_degree==1:
-        # Σⁿ⁺¹ = γ·Σₘ + (1-γ)·Σⁿ
-        new_cov_ = gamma*(cov_max) + (1-gamma) * cov
-        new_cov_sqrt_ = None
-        
-    elif G.backtracking_degree==0.5:
-        #Sⁿ⁺¹ = γ·Σₘ^(½) + (1-γ)·Sⁿ                with Sⁿ = (Σⁿ)^½
-        new_cov_sqrt_ = gamma*(cov_max_sqrt) \
-                        + (1-gamma) * new_cov_sqrt
-        new_cov_ = new_cov_sqrt_ @ tf.transpose(new_cov_sqrt_)
-    
-    if G.comp_opt=="cholesky":
-        #new_cov sqrt may already be calculated, see above
-        if new_cov_sqrt_ is None:
-            new_cov_sqrt_ = matrix_sqrt(new_cov_)
-        new_logdet_ = 2*tf.reduce_sum(tf.log(tf.linalg.diag_part(new_cov_sqrt_)))
-    
-    elif G.comp_opt=="svd":
-        s_new_cov, u_new_cov, v_new_cov = tf.linalg.svd(new_cov_)
-        #new_cov sqrt may already be calculated, see above
-        if new_cov_sqrt_ is None:
-            s_new_cov_sqrt = tf.linalg.diag(tf.sqrt(s_new_cov))
-            new_cov_sqrt_ = tf.matmul(u_new_cov, tf.matmul(s_new_cov_sqrt, v_new_cov, adjoint_b=True))
-        new_logdet_ = tf.reduce_sum(tf.log(s_new_cov))
-    
+    pars = [cov_max_inv,new_cov_sqrt]
+    new_cov_, new_cov_sqrt_, new_logdet_ = compute_new_cov_and_co(G,gamma,cov,cov_max,*pars)
     new_mu_  = mu - step_size * tf.einsum('ij,j->i', beta_inv, rho)
 
+    """
+    UPDATE
+    """
     if not G.diag_cov:
         update_new_cov = tf.assign(new_cov, new_cov_)
     else:
@@ -218,11 +182,6 @@ def construct_bullseye_graph(G):
         update_new_parameters += [update_new_cov_sqrt]
     else:
         update_new_cov_sqrt = None
-    
-    #sampling hermite for normal iid prior
-    #→
-    z_hermite = None
-    weights_hermite = None
 
     """
     TRIPLETS
@@ -231,137 +190,114 @@ def construct_bullseye_graph(G):
     #for readability
     ltargs = [new_mu,new_cov,new_cov_sqrt]
     
-    #if not batched
-    if not G.m>0:
-        computed_e, computed_rho, computed_beta = \
-            likelihood_triplet(G,X,Y,*ltargs)
-    #if batched
-    else :
-        computed_e, computed_rho, computed_beta = \
-            batched_likelihood_triplet(G,X,Y,*ltargs)
-
-    tf.identity(computed_e, name = "computed_e")
-    tf.identity(computed_rho, name = "computed_rho")
-    tf.identity(computed_beta, name = "computed_beta")
+    computed_e, computed_rho, computed_beta = \
+        likelihood_triplet(G,X,Y,*ltargs)
 
 
     #PRIO TRIPLET
     ptargs = [new_mu,new_cov,new_cov_sqrt]
     computed_e_prior, computed_rho_prior, computed_beta_prior =\
         prior_triplet(G, *ptargs)
-    tf.identity(computed_e_prior, name = "computed_e_prior")
-    tf.identity(computed_rho_prior, name = "computed_rho_prior")
-    tf.identity(computed_beta_prior, name = "computed_beta_prior")
 
     """
     FOR CHUNKS
     """
-
-    if G.file is not None:
-        #if streaming through a file as sum
+    if G.m is not None:
+        #init partials
+        # what should be updated each time we go again through the M chunks
+        init_partials = []
+        update_partials = []
+        
+        if G.file is not None and G.tf_dataset:
+            #if we use tf.dataset, we need to reset the iterator to 0
+            init_partials += [iterator]
+        if G.file is None:
+            init_partials += [x_index]
+        
+        if G.file is None:
+            x_index_update = tf.assign(x_index,x_index + 1)
+            update_partials += [x_index_update]
+        
+        #consider sum
         if G.chunk_as_sum:
-            global_e = tf.get_variable("global_e",
-                                    [],
+            e_sum = tf.get_variable("e_sum",[],
                                     initializer = tf.zeros_initializer,
                                     dtype = tf.float32)
-            global_rho = tf.get_variable("global_rho",
-                                    [p],
+            rho_sum = tf.get_variable("rho_sum",[p],
                                     initializer = tf.zeros_initializer,
                                     dtype = tf.float32)
-            global_beta = tf.get_variable("global_beta",
-                                    [p,p],
+            beta_sum = tf.get_variable("beta_sum",[p,p],
                                     initializer = tic(np.linalg.inv(G.cov_0)),
                                     dtype = tf.float32)
 
             #chunk as sum, will increase step by step global_e, global_rho and
             #global_beta with update_globals
-            update_global_e = tf.assign(global_e,
-                        global_e + computed_e + computed_e_prior)
-            update_global_rho = tf.assign(global_rho,
-                        global_rho + computed_rho + computed_rho_prior)
-            update_global_beta = tf.assign(global_beta,
-                        global_beta + computed_beta + computed_beta_prior)
+            update_partial_e=tf.assign(e_sum,e_sum+computed_e)
+            update_partial_rho=tf.assign(rho_sum,rho_sum+computed_rho)
+            update_partial_beta=tf.assign(beta_sum,beta_sum+computed_beta)
 
-
-        #chunk as list
+        #conside vectors
+        # then we need to keep in mind all the different eᵢ,ρᵢ,βᵢ
         else:
-            global_e = []
-            global_rho = []
-            global_beta = []
+            e_tab = []
+            rho_tab = []
+            beta_tab = []
 
-            update_global_e = []
-            update_global_rho = []
-            update_global_beta = []
+            update_e_tab = []
+            update_rho_tab = []
+            update_beta_tab = []
 
-            width = len(str(G.nb_of_chunks))
-            for _ in range(G.nb_of_chunks):
+            width = len(str(G.M))
+            for _ in range(G.M):
                 idx = "chunk_{_:0>{width}}".format(_=_, width=width)
-                global_e.append(tf.get_variable("global_e_"+idx, [],
+                e_tab.append(tf.get_variable("e_"+idx, [],
                                         initializer = tf.zeros_initializer,
                                         dtype = tf.float32))
-                global_rho.append(tf.get_variable("global_rho_"+idx, [p],
+                rho_tab.append(tf.get_variable("rho_"+idx, [p],
                                         initializer = tf.zeros_initializer,
                                         dtype = tf.float32))
-                global_beta.append(tf.get_variable("global_beta_"+idx, [p,p],
+                beta_tab.append(tf.get_variable("beta_"+idx, [p,p],
                                         initializer=tic(np.linalg.inv(G.cov_0)),
                                         dtype = tf.float32))
 
-                update_global_e.append(tf.assign(global_e[_],
-                                        computed_e + computed_e_prior))
-                update_global_rho.append(tf.assign(global_rho[_],
-                                        computed_rho + computed_rho_prior))
-                update_global_beta.append(tf.assign(global_beta[_],
-                                        computed_beta + computed_beta_prior))
+                update_partial_e.append(tf.assign(e_tab[_],computed_e))
+                update_partial_rho.append(tf.assign(rho_tab[_],commuted_rho))
+                update_partial_beta.append(tf.assign(beta_tab[_],computed_beta))
+            
+            #we need to reset the sum to 0 at each iteration
+            init_partials += [e_tab, rho_tab, beta_tab]
 
-        #chunk
-        tf.identity(update_global_e, name = "update_global_e")
-        tf.identity(update_global_rho, name = "update_global_rho")
-        tf.identity(update_global_beta, name = "update_global_beta")
-
-        global_list = []
-        if G.tf_dataset:
-            global_list += [iterator]
-        if G.chunk_as_sum:
-            global_list += [global_e, global_rho, global_beta]
-
-        init_globals = tf.variables_initializer(global_list)
-
-        update_globals=[update_global_e, update_global_rho, update_global_beta]
-    #if not streaming through a file, they will not be used
+        update_partials+=[update_partial_e, update_partial_rho, update_partial_beta]
+        init_chunks = tf.variables_initializer(init_partials)
+    
+    #if we do not consider batches
     else:
-        global_e, global_rho, global_beta = 3*[tf.no_op()]
-        update_globals, init_globals = 2*[tf.no_op()]
+        init_chunks, update_partials = 2*[tf.no_op()]
 
 
     """
     NEW PARAMS
     """
     #if G.file is None, we are directly using triplets results
-    if G.file is None:
+    if G.m is None:
         new_e = computed_e + computed_e_prior
         new_rho  = computed_rho + computed_rho_prior
         new_beta = computed_beta + computed_beta_prior
 
-    #if G.file, we use global_e, global_rho and global_beta
+    #if batches are used
     else:
         if G.chunk_as_sum:
-            new_e = global_e
-            new_rho = global_rho
-            new_beta = global_beta
+            new_e = e_sum + computed_e_prior
+            new_rho = e_sum + computed_rho_prior
+            new_beta = e_sum + computed_beta_prior
         else: #chunk as list
-            new_e = tf.reduce_sum(global_e, axis = 0)
-            new_rho = tf.reduce_sum(global_rho, axis = 0)
-            new_beta = tf.reduce_sum(global_beta, axis = 0)
-
-    tf.identity(new_e, name = "new_e")
-    tf.identity(new_rho, name = "new_rho")
-    tf.identity(new_beta, name = "new_beta")
+            new_e = tf.reduce_sum(e_tab, axis = 0) + computed_e_prior
+            new_rho = tf.reduce_sum(rho_tab, axis = 0) + computed_rho_prior
+            new_beta = tf.reduce_sum(beta_tab, axis = 0) + computed_beta_prior
 
     #new ELBO
     H = 0.5 *  new_logdet + d * 0.5 * np.log(2*np.pi*np.e)
     new_ELBO = - new_e + H
-
-    tf.identity(new_ELBO, name = "new_ELBO")
 
     """
     ACCEPTED UPDATE
@@ -394,19 +330,7 @@ def construct_bullseye_graph(G):
     """
     ITERATIONS
     """
-
-    if False:
-        #the eigmin_condition requests that eigmin(βⁿ⁺¹) > ½·eigmin(βⁿ)
-        #note that:
-        #   eigmin(βⁿ⁺¹) = min(new_cov_S⁻¹) = max(new_cov_S)⁻¹
-        #   eigmin(βⁿ) = min(beta_S)
-        #new_eigmin = tf.linalg.inv(tf.reduce_max(new_cov_S))
-        #curr_eigmin = tf.reduce_min(beta_S)
-        #condition_update = (new_ELBO > ELBO) and (2*new_eigmin > curr_eigmin)
-        pass
-    else:
-        condition_update = new_ELBO > ELBO
-
+    condition_update = new_ELBO > ELBO
 
     brutal_iteration = accepted_update
     soft_iteration = tf.cond(condition_update, accepted_update, refused_update)
@@ -434,9 +358,8 @@ def construct_bullseye_graph(G):
                 'new_logdet' : new_logdet,
                 'new_e': new_e,
 
-                'update_globals' : update_globals,
-                'init_globals' : init_globals,
-                'global_e' : global_e,
+                'update_partials' : update_partials,
+                'init_chunks' : init_chunks,
 
                 'computed_e' : computed_e,
                 'computed_e_prior' : computed_e_prior,

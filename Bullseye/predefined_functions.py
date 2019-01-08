@@ -87,8 +87,6 @@ or
 def Psi_multilogit(X,Y,theta):
     """
     ψ(X,Y,θ) = - log[ ∑ᵢ (∑ⱼ Yⱼexp(θⱼ·xᵢ))/(∑ⱼ exp(θⱼ·xᵢ)) ]
-    We first compute Aᵢⱼ=θⱼ·xᵢ then reuse Phi_multilogit which
-    computes ∑ᵢ (∑ⱼ Yⱼexp(Aᵢⱼ))/(∑ⱼ exp(Aᵢⱼ))
     """
     k = Y.shape.as_list()[1]
     d = X.shape.as_list()[1]
@@ -121,12 +119,15 @@ def hess_Psi_multilogit(X,Y,theta):
     I_ = tf.ones([k,k])-tf.eye(k)
     big_P = tf.einsum('ab,abi->abi',I,P_eq)\
         + tf.einsum('ab,abi->abi',I_,P_neq)
-    H = tf.einsum('ik,abi,il->akbl',X,big_P,X)
-    H_ = tf.reshape(H,[d*k,d*k])
-    return -H_
+    #H__ = tf.einsum('ik,abi,il->akbl',X,big_P,X)
+    H_ = tf.einsum('ik,abi->akbi',X,big_P)
+    H__ = tf.einsum('akbi,il->akbl',H_,X)
+    H = tf.reshape(H__,[d*k,d*k])
+    return -H
 
 
 predefined_Psis["multilogit_without_hess"] = [Psi_multilogit, grad_Psi_multilogit,None]
+predefined_Psis["multilogit_without_grad"] = [Psi_multilogit, None, hess_Psi_multilogit]
 predefined_Psis["multilogit"] = [Psi_multilogit, grad_Psi_multilogit,hess_Psi_multilogit]
 predefined_Psis["multilogit_simple"] = [Psi_multilogit, None,None]
 
@@ -162,6 +163,7 @@ def hess_Psi_LM(X,Y,theta):
 
 predefined_Psis["LM_simple"]=[Psi_LM, None, None]
 predefined_Psis["LM_without_hess"] = [Psi_LM, grad_Psi_LM, None]
+predefined_Psis["LM_without_grad"]=[Psi_LM, grad_Psi_LM, hess_Psi_LM]
 predefined_Psis["LM"]=[Psi_LM, grad_Psi_LM, hess_Psi_LM]
 
 def Psi_CNN(X,Y,theta,conv_sizes,pools):
@@ -292,10 +294,9 @@ def hess_Phi_LM(A,Y):
     hess_phi = tf.expand_dims(tf.ones_like(A),2)
     return hess_phi
 
-predefined_Phis["LM_simple"] = [Phi_LM, None, None]
-predefined_Phis["LM_without_hess"] = [Phi_LM, grad_Phi_LM, None]
 predefined_Phis["LM"] = [Phi_LM, grad_Phi_LM, hess_Phi_LM]
-predefined_Phis["LM_spe"] = [Phi_LM, None, hess_Phi_LM]
+predefined_Phis["LM_without_hess"] = [Phi_LM, grad_Phi_LM, None]
+predefined_Phis["LM_simple"] = [Phi_LM, None, None]
 
 """
 MULTILOGIT
@@ -314,7 +315,6 @@ def hess_Phi_multilogit(A,Y):
 
 predefined_Phis["multilogit"] = [Phi_multilogit, grad_Phi_multilogit,hess_Phi_multilogit]
 predefined_Phis["multilogit_without_hess"] = [Phi_multilogit, grad_Phi_multilogit,None]
-predefined_Phis["multilogit_spe"] = [Phi_multilogit, None,hess_Phi_multilogit]
 predefined_Phis["multilogit_simple"] = [Phi_multilogit, None, None]
 
 #mapfn_opt
@@ -330,7 +330,7 @@ def grad_Phi_multilogit_mapfn_opt(A,Y):
                     (A,Y,P), dtype=tf.float32)
 def hess_Phi_multilogit_mapfn_opt(A,Y):
     P=Softmax_probabilities(A)
-    return tf.mafn(lambda x:
+    return tf.map_fn(lambda x:
                 hess_phi_multilogit_opt(x[0], x[1], x[2]),
                 (A,Y,P), dtype=tf.float32)
 
@@ -344,11 +344,11 @@ def Phi_multilogit_mapfn(A,Y):
                 phi_multilogit(x[0], x[1]),
                 (A,Y), dtype=tf.float32)
 def grad_Phi_multilogit_mapfn(A,Y):
-    return tf.mafn(lambda x:
+    return tf.map_fn(lambda x:
                 grad_phi_multilogit(x[0], x[1]),
                 (A,Y), dtype=tf.float32)
 def hess_Phi_multilogit_mapfn(A,Y):
-    return tf.mafn(lambda x:
+    return tf.map_fn(lambda x:
                 hess_phi_multilogit(x[0], x[1]),
                 (A,Y), dtype=tf.float32)
 
@@ -400,8 +400,9 @@ tf.tensor [n, d, k]:
     {Aᵢ : i∈〚1,n〛}
 """
 
-def Proj_multilogit(X,d,k):
+def Proj_multilogit(X,k):
     #→
+    d = X.shape.as_list()[1]
     X_tiled = tf.tile(X, [1,k])
     kron = np.kron(np.eye(k),np.ones((d,1)))
     KP = tf.convert_to_tensor(kron, tf.float32)
@@ -409,11 +410,12 @@ def Proj_multilogit(X,d,k):
 
 predefined_Projs["multilogit"] = Proj_multilogit
 
-def Proj_multilogit_mapfn(X, d, k):
+def Proj_multilogit_mapfn(X, k):
+    d = X.shape.as_list()[1]
     return tf.map_fn(lambda x: proj_multilogit(x,d,k), X)
 
 predefined_Projs["multilogit_mapfn"] = Proj_multilogit_mapfn
 
-def Proj_LM(X,d,k):
+def Proj_LM(X,k):
     return tf.expand_dims(X,2)
 predefined_Projs["LM"] = Proj_LM

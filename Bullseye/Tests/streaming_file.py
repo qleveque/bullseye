@@ -14,44 +14,48 @@ result_filename = os.path.join(cwd,"data","streaming_file.data")
 
 def streaming_file(recompute = False):
     if recompute:
-        k=10
+        k=5
+        d=10
+        n=50000
         theta_0, x_array, y_array =\
-            Bullseye.generate_multilogit(d = 10, n = 10**4, k = k, file = csv_filename)
+            Bullseye.generate_multilogit(d = d, n = n, k = k, file = csv_filename)
         
-        df = pd.DataFrame(columns=["method","times","status"])
+        df = pd.DataFrame(columns=["method","time","status"])
         
-        n_iter = 10
+        n_iter = 5
         n_loops = 10
+        ms = [5000,1000]
+        methods = ["pandas", "tf"]
         
-        methods = ["np_data", "streaming"]
-        
-        for method in methods:
-            bull = Bullseye.Graph()
-            
-            if method=="np_data":
-                bull.feed_with(X = x_array, Y = y_array)
-            else:
-                bull.feed_with(file=csv_filename, chunksize = 400, k = k)
+        for m in ms:
+            for method in methods:
+                bull = Bullseye.Graph()
+                bull.feed_with(file=csv_filename, k = k, m=5000)
+                bull.set_predefined_model("multilogit")
+                bull.set_predefined_prior("normal_iid")
+                bull.init_with(mu_0 = 0, cov_0 = 1)
+                bull.set_options(tf_dataset=(method=="tf"),to_one_hot=True)
+                bull.build()
                 
-            bull.set_predefined_model("multilogit", use_projections = False)
-            bull.init_with(mu_0 = 0, cov_0 = 1)
-            bull.build()
-            
-            for _ in range(n_loops):
-                run_id = '{method} run {n}'.format(n=_, method=method)
-                d = bull.run(n_iter = n_iter, run_id = run_id)
-                df_ = pd.DataFrame({'method' : n_iter*[method],
-                                    'times' : d["times"],
-                                    'status': d["status"]})
-                df = df.append(df_)
+                for _ in range(n_loops):
+                    run_id = '{method} run {n}'.format(n=_, method=method)
+                    d = bull.run(n_iter = n_iter, run_id = run_id)
+                    df_ = pd.DataFrame({'method' : n_iter*[method],
+                                        'time' : d["times"],
+                                        'status': d["status"],
+                                        'm' : n_iter*[m]})
+                    df = df.append(df_, sort = False)
                 
         with open(result_filename, "w", encoding = 'utf-8') as f:
             df.to_csv(result_filename)
     
     if os.path.isfile(result_filename):
         df = pd.read_csv(result_filename)
-        sns.boxplot(x="method", y="times",data=df)
-        plt.title('Study of the efficiency of file streaming')
-        handle_fig("streaming_file")
+        sns.set()
+        sns.boxplot(x="method", y="time",data=df.loc[df["m"]==ms[0]])
+        handle_fig("streaming_file_0")
+        sns.set()
+        sns.boxplot(x="method", y="time",data=df.loc[df["m"]==ms[1]])
+        handle_fig("streaming_file_0")
     else:
         raise FileNotFoundError

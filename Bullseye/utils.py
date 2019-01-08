@@ -56,7 +56,7 @@ def evaluate_multilogit_results(theta_0, mu):
     print("norm of the error")
     print(np.linalg.norm(e))
     
-def generate_multilogit(d,n,k):
+def generate_multilogit(d,n,k, file = None):
     """
     →
     """
@@ -73,6 +73,11 @@ def generate_multilogit(d,n,k):
     probs = [softmax_probabilities(score) for score in scores]
     #generate labels
     y_array = np.asarray([np.random.multinomial(1,prob) for prob in probs])
+
+    if file is not None:
+        y_flat = np.expand_dims(from_one_hot(y_array), 1)
+        to_write = np.hstack((y_flat,x_array))
+        np.savetxt(file, to_write, delimiter=",", fmt='% 1.3f')
 
     return theta_0, x_array, y_array.astype(np.float32)
 

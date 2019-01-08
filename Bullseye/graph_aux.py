@@ -47,6 +47,7 @@ def likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
 
     """
     pars = [G,X,Y,new_mu,new_cov,new_cov_sqrt]
+    
     if G.use_projs :
         return proj_likelihood_triplet(*pars)
     else:
@@ -224,123 +225,15 @@ def prior_triplet(G,new_mu,new_cov,new_cov_sqrt):
     return relocalize(G,computed_e_l, computed_rho_l, computed_beta, new_mu)
 
 def relocalize(G, e_l, rho_l, beta, mu):
-    if G.natural_param:
-        rho = rho_l - tf.einsum('i,ij->j',mu,beta)
-        e = e_l - tf.einsum('i,i->',rho_l,mu) \
-            + 0.5 * tf.einsum('i,ij,j->',mu, beta,mu)
-        return e, rho, beta
+    rho = rho_l - tf.einsum('i,ij->j',mu,beta)
+    e = e_l - tf.einsum('i,i->',rho_l,mu) \
+        + 0.5 * tf.einsum('i,ij,j->',mu, beta,mu)
     
     return e_l, rho_l, beta
 
 """
-BATCHED TRIPLETS
-"""
-
-def batched_likelihood_triplet(G,X,Y,*pars):
-    """
-    Overlay function of ``likelihood_triplet``.
-    Is called when we want to apply ``likelihood_triplet`` on X and Y using
-    batches.
-    """
-    #retrieve the current shapes
-    x_shape = tf.shape(X)
-    y_shape = tf.shape(Y)
-    #the number of observations
-    n = x_shape[0]
-    #each batch will contain m elements, but the last one, which will contain
-    #r elements
-    r = n%G.m
-
-    #remove the rest from the input matrices
-    X_d, X_r = tf.split(X, [n-r, r], 0)
-    Y_d, Y_r = tf.split(Y, [n-r, r], 0)
-
-    #reshape what remains into the different batches
-    X_ = tf.reshape(X_d , [tf.cast(n/G.m, tf.int32), G.m, G.d])
-    Y_ = tf.reshape(Y_d , [tf.cast(n/G.m, tf.int32), G.m, G.k])
-
-    #compute e, rho and beta for these batches
-    Computed_e, Computed_rho, Computed_beta =\
-        tf.map_fn(lambda x :\
-            likelihood_triplet(G,x[0],x[1],*pars),\
-            (X_,Y_), dtype=(tf.float32, tf.float32, tf.float32))
-
-    #compute e, rho and beta for the rest matrix
-    computed_e_remaining, computed_rho_remaining, computed_beta_remaining =\
-        likelihood_triplet(G, X_r, Y_r, *pars)
-
-    #compute the sum of all those computed parameters e, rho and beta
-    computed_e = tf.reduce_sum(Computed_e, 0) + computed_e_remaining
-    computed_rho = tf.reduce_sum(Computed_rho, 0) + computed_rho_remaining
-    computed_beta = tf.reduce_sum(Computed_beta, 0) + computed_beta_remaining
-
-    return computed_e, computed_rho, computed_beta
-
-"""
 AUXILLIARY FUNCTIONS
 """
-
-def aux_A_arrays(G, X):
-    """
-    Make the computation of the different projection matrices Aᵢ.
-
-
-    Returns
-    -------
-    A_array : tf.tensor [n,p,k]
-        The set of projection matrices where A_array[i]=Aᵢ
-    A_array_kernel : tf.tensor [n,p,k,p,k], optional
-        The set of projection matrix kernels, where
-        A_array_kernel[i,a,b,c,d] = Aᵢ[a,b] × Aᵢ[c,d]
-    """
-    #A_array[i]=Aᵢ              of size [n,p,k]
-    A_array =  G.Proj(X, G.d, G.k)
-
-    #compute optionally the kernel
-    A_array_kernel = None
-    if G.compute_kernel:
-        A_array_kernel = tf.einsum('npk,nqj->npkqj', A_array, A_array,
-                                    name = "As_kernel")
-
-    return A_array, A_array_kernel
-
-def aux_local_parameters(G,A_array,A_array_kernel,new_mu,new_cov,new_cov_sqrt):
-    """
-    Make the computation of the different local parameters, μᵢ and σᵢ.
-
-    Returns
-    -------
-    local_mu : tf.tensor [n,k]
-        𝔼[Aᵢ·θ]
-    local_std : tf.tensor [n,k,k]
-        sd[Aᵢ·θ]=√Var[Aᵢ·θ]
-    """
-    #compute local_mu:
-    # local_mu[i] = μᵢ = Aᵢ·μ               of size [n,k]
-    local_mu = tf.einsum('iba,b->ia',A_array, new_mu,
-                          name = 'einsum_local_mu') #[n,k]
-
-    #compute local_std
-    # local_std[i] = σᵢ = √Var[Aᵢ·θ]
-    if not G.local_std_trick:
-        #using new_cov_sqrt, no use of A_array_kernel
-        local_cov = None
-        #compute:
-        # local_std = σᵢ = √Σ·Aᵢ        of size [n,p,k]
-        local_std = tf.einsum('pq,nqk->npk', new_cov_sqrt, A_array,
-                                name = 'einsum_std_trick')
-    else:
-        # local_std[i] = √local_cov[i] = √(Aᵢ·Σ·(Aᵢ^T))
-        if G.compute_kernel:
-            local_cov = tf.einsum('npkql,pq->nkl', A_array_kernel, new_cov,
-                                 name = 'einsum_lazy_kernel_local_cov')
-        else:
-            local_cov = tf.einsum('npk,pq,nql->nkl', A_array, new_cov, A_array,
-                                 name = 'einsum_lazy_local_cov')
-        local_std_T = tf.linalg.cholesky(local_cov)
-        local_std = tf.transpose(local_std_T, perm=[0, 2, 1])
-
-    return local_mu, local_std, local_cov
 
 def compute_phis(G, Activations, Y, local_mu, local_std, local_cov):
     """
@@ -491,50 +384,6 @@ def hess_approx(G,w,act,grad):
         r = tf.einsum('i,ijk->ijk',act,inside)
         return r
 
-def aux_compute_beta(G, A_array_kernel, A_array, local_B):
-    """
-    Compute β from B in the case we are using projected parameters.
-    """
-    #compute β
-    # computed_beta = β = ∑ᵢ (Aᵢ^T)·Bᵢ·Aᵢ = ∑ᵢ βᵢ       of size [p,p]
-    if G.compute_kernel:
-        computed_beta = tf.einsum('npkqj,nkj->pq',A_array_kernel, local_B,
-                                  name = 'einsum_likelihood_compute_kernel')
-    else:
-        computed_beta_ = tf.einsum('ijk,ikl->ijl', A_array, local_B,
-                                      name = 'computed_beta_aux')
-        computed_beta = tf.einsum('ijl,iml->jm',computed_beta_, A_array,
-                                 name = 'computed_beta')
-    return computed_beta
-
-"""
-AUTO GRAD HESS
-"""
-
-def auto_grad_Psi(Psi,X,Y,theta):
-    return tf.gradients(Psi(X,Y,theta),theta)[0]
-
-def auto_hess_Psi(Psi,X,Y,theta):
-    return tf.hessians(Psi(X,Y,theta),theta)[0]
-
-def auto_grad_Phi(Phi,A,Y):
-    return tf.gradients(Phi(A,Y),A)[0]
-
-#auto_hess_Phi impossible to compute
-
-def auto_grad_Pi(Pi,theta):
-    return tf.gradients(Pi(theta),theta)[0]
-
-def auto_hess_Pi(Pi,theta):
-    return tf.hessians(Pi(theta),theta)[0]
-
-def hess_from_grad(grad):
-    return tf.tensordot(grad,grad,axes=0)
-
-"""
-AUTO HESS
-"""
-
 def compute_hess(G, f, thetas, mu, cov, act, grad):
     """
     Compute the hessians of the function f given its sample thetas.
@@ -569,3 +418,119 @@ def compute_hess(G, f, thetas, mu, cov, act, grad):
         inside = 0.5 * (outer - I)
         return tf.einsum('i,ijk->ijk', act,inside)
     
+"""
+OTHER AUXILLIARY
+"""
+
+def aux_A_arrays(G, X):
+    """
+    Make the computation of the different projection matrices Aᵢ.
+
+
+    Returns
+    -------
+    A_array : tf.tensor [n,p,k]
+        The set of projection matrices where A_array[i]=Aᵢ
+    A_array_kernel : tf.tensor [n,p,k,p,k], optional
+        The set of projection matrix kernels, where
+        A_array_kernel[i,a,b,c,d] = Aᵢ[a,b] × Aᵢ[c,d]
+    """
+    #A_array[i]=Aᵢ              of size [n,p,k]
+    A_array =  G.Proj(X, G.d, G.k)
+
+    #compute optionally the kernel
+    A_array_kernel = None
+    if G.compute_kernel:
+        A_array_kernel = tf.einsum('npk,nqj->npkqj', A_array, A_array,
+                                    name = "As_kernel")
+
+    return A_array, A_array_kernel
+
+def aux_local_parameters(G,A_array,A_array_kernel,new_mu,new_cov,new_cov_sqrt):
+    """
+    Make the computation of the different local parameters, μᵢ and σᵢ.
+
+    Returns
+    -------
+    local_mu : tf.tensor [n,k]
+        𝔼[Aᵢ·θ]
+    local_std : tf.tensor [n,k,k]
+        sd[Aᵢ·θ]=√Var[Aᵢ·θ]
+    """
+    #compute local_mu:
+    # local_mu[i] = μᵢ = Aᵢ·μ               of size [n,k]
+    local_mu = tf.einsum('iba,b->ia',A_array, new_mu,
+                          name = 'einsum_local_mu') #[n,k]
+
+    #compute local_std
+    # local_std[i] = σᵢ = √Var[Aᵢ·θ]
+    if not G.local_std_trick:
+        #using new_cov_sqrt, no use of A_array_kernel
+        local_cov = None
+        #compute:
+        # local_std = σᵢ = √Σ·Aᵢ        of size [n,p,k]
+        local_std = tf.einsum('pq,nqk->npk', new_cov_sqrt, A_array,
+                                name = 'einsum_std_trick')
+    else:
+        # local_std[i] = √local_cov[i] = √(Aᵢ·Σ·(Aᵢ^T))
+        if G.compute_kernel:
+            local_cov = tf.einsum('npkql,pq->nkl', A_array_kernel, new_cov,
+                                 name = 'einsum_lazy_kernel_local_cov')
+        else:
+            local_cov = tf.einsum('npk,pq,nql->nkl', A_array, new_cov, A_array,
+                                 name = 'einsum_lazy_local_cov')
+        local_std_T = tf.linalg.cholesky(local_cov)
+        local_std = tf.transpose(local_std_T, perm=[0, 2, 1])
+
+    return local_mu, local_std, local_cov
+
+def aux_compute_beta(G, A_array_kernel, A_array, local_B):
+    """
+    Compute β from B in the case we are using projected parameters.
+    """
+    #compute β
+    # computed_beta = β = ∑ᵢ (Aᵢ^T)·Bᵢ·Aᵢ = ∑ᵢ βᵢ       of size [p,p]
+    if G.compute_kernel:
+        computed_beta = tf.einsum('npkqj,nkj->pq',A_array_kernel, local_B,
+                                  name = 'einsum_likelihood_compute_kernel')
+    else:
+        computed_beta_ = tf.einsum('ijk,ikl->ijl', A_array, local_B,
+                                      name = 'computed_beta_aux')
+        computed_beta = tf.einsum('ijl,iml->jm',computed_beta_, A_array,
+                                 name = 'computed_beta')
+    return computed_beta
+
+def compute_new_cov_and_co(G,gamma,cov, cov_max,
+                    cov_max_inv,
+                    new_cov_sqrt):
+    
+    new_cov_sqrt_ = None
+    if G.backtracking_degree==-1:
+        # Σⁿ⁺¹ = (γ·(Σₘ)⁻¹ + (1-γ)·(Σⁿ)⁻¹)⁻¹
+        new_cov_=tf.linalg.inv(gamma * cov_max_inv \
+                               + (1-gamma) * tf.linalg.inv(cov))
+    elif G.backtracking_degree==1:
+        # Σⁿ⁺¹ = γ·Σₘ + (1-γ)·Σⁿ
+        new_cov_ = gamma*(cov_max) + (1-gamma) * cov
+        
+    elif G.backtracking_degree==0.5:
+        #Sⁿ⁺¹ = γ·Σₘ^(½) + (1-γ)·Sⁿ                with Sⁿ = (Σⁿ)^½
+        new_cov_sqrt_ = gamma*(cov_max_sqrt) \
+                        + (1-gamma) * new_cov_sqrt
+        new_cov_ = new_cov_sqrt_ @ tf.transpose(new_cov_sqrt_)
+        
+    if G.comp_opt=="cholesky":
+        #new_cov sqrt may already be calculated, see above
+        if new_cov_sqrt_ is None:
+            new_cov_sqrt_ = matrix_sqrt(new_cov_)
+        new_logdet_ = 2*tf.reduce_sum(tf.log(tf.linalg.diag_part(new_cov_sqrt_)))
+    
+    elif G.comp_opt=="svd":
+        s_new_cov, u_new_cov, v_new_cov = tf.linalg.svd(new_cov_)
+        #new_cov sqrt may already be calculated, see above
+        if new_cov_sqrt_ is None:
+            s_new_cov_sqrt = tf.linalg.diag(tf.sqrt(s_new_cov))
+            new_cov_sqrt_ = tf.matmul(u_new_cov, tf.matmul(s_new_cov_sqrt, v_new_cov, adjoint_b=True))
+        new_logdet_ = tf.reduce_sum(tf.log(s_new_cov))
+        
+    return new_cov_, new_cov_sqrt_, new_logdet_

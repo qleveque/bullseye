@@ -57,10 +57,12 @@ def local_std_trick(recompute = False):
     if os.path.isfile(result_filename):
         df = pd.read_csv(result_filename)
         
+        sns.set()
         sns.boxplot(x="method", y="time",data=df.loc[df['test'] == 'win'])
         plt.title('Study of the interest of the local_std_trick')
         handle_fig("local_std_trick_win")
         
+        sns.set()
         sns.boxplot(x="method", y="time",data=df.loc[df['test'] != 'win'])
         plt.title('Study of the interest of the local_std_trick')
         handle_fig("local_std_trick_loses")
