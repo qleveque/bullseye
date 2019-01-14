@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="bullseye_method",
-    version="1.0.0",
+    version="1.0.1",
     author="Quentin Leveque",
     author_email="qleveque@hotmail.com",
     description=\
@@ -23,7 +23,7 @@ setuptools.setup(
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: GPL3",
         "Operating System :: OS Independent",
     ],
     include_package_data = True

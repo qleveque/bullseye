@@ -58,4 +58,4 @@ See also the list of [contributors](https://github.com/Whenti/bullseye/contribut
 
 ## License
 
-This project is proudly licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.
+This project licensed under the GPL3 License - see the [LICENSE.txt](LICENSE.txt) file for details.
