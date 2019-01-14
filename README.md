@@ -14,7 +14,7 @@ Bullseye! is now available as a [PyPI package](https://pypi.python.org/pypi/bull
 pip install bullseye_method
 ```
 
-or clone the repository (no installation required, dependencies will be installed automatically):
+or clone the repository :
 
 ```
 git clone https://github.com/Whenti/bullseye
@@ -41,10 +41,10 @@ theta_0, x_array, y_array = generate_multilogit(d = 10, n = 10**3, k = 5)
 
 bull = Bullseye.Graph()
 bull.feed_with(x_array,y_array)
-bull.set_model("multilogit")
+bull.set_predefined_model("multilogit")
+bull.set_predefined_prior("normal_iid")
 bull.init_with(mu_0 = 0, cov_0 = 1)
-bull.set_options(local_std_trick = True,
-                 keep_1d_prior = True)
+bull.set_options(local_std_trick = True, s=5)
 bull.build()
 
 bull.run()
@@ -53,7 +53,6 @@ bull.run()
 ## Authors
 
 * **Quentin Lévêque** [Whenti](https://github.com/Whenti)
-* **Guillaume Dehaene**
 
 See also the list of [contributors](https://github.com/Whenti/bullseye/contributors) who participated in this project. Hopefully, there will be more.
 

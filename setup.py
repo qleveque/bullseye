@@ -5,9 +5,9 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="bullseye_method",
-    version="0.0.33",
-    author="Quentin Lévêque, Guillaume Dehaene",
-    author_email="qleveque@hotmail.com, guillaume.dehaene@gmail.com",
+    version="1.0.0",
+    author="Quentin Leveque",
+    author_email="qleveque@hotmail.com",
     description=\
     "Implemented tensorflow version of the Bullseye method for prior approximation.",
     long_description=long_description,
