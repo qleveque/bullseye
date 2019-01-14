@@ -9,7 +9,7 @@ import Bullseye
 from .utils import *
 
 cwd = os.path.dirname(os.path.realpath(__file__))
-result_filename = os.path.join(cwd,"data","local_std_trick.data")
+result_filename = os.path.join(cwd,"data","proj.data")
 
 def proj(recompute = False):
     if recompute:

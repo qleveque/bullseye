@@ -12,7 +12,7 @@ from Bullseye.visual import *
 import math
 
 cwd = os.path.dirname(os.path.realpath(__file__))
-result_filename = os.path.join(cwd,"data","chol_svd.data")
+result_filename = os.path.join(cwd,"data","std_chol_svd.data")
 
 def std_chol_svd(recompute = False):
     ps = [10**i for i in range(1,4)]
