@@ -28,14 +28,15 @@ def Probabilities_CNN(X,k,theta,conv_sizes,pools):
     images = [tf.expand_dims(X_reshaped,3)]
 
     #size of the final flatten list
-    flatten_size = int(c/np.prod(pools))**2
+    flatten_size = math.floor(c/np.prod(pools))**2
 
     #split theta accordingly to the convolution filters
     how_to_split_theta = []
     for i in range(len(conv_sizes)):
         how_to_split_theta += [conv_sizes[i]**2, 1]
 
-    #for final logistic regression
+    #for final logistic regression,
+    # with flatten_size×k parameters and k interecepts
     how_to_split_theta += [flatten_size*k, k]
 
     #finally split theta

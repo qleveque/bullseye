@@ -89,10 +89,28 @@ def brutal_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
     #computed_beta = β = ∑ⱼ wⱼ·Hψ(θⱼ) ≈ 𝔼[Hψ(θⱼ)]          of size [k,k]
     computed_e = tf.einsum('s,s->',z_weights, psi)
     computed_rho = tf.einsum('s,sk->k',z_weights, grad_psi)
-    computed_beta = tf.einsum('s,skj->kj',z_weights, hess_psi)
+    if not G.diag_cov:
+        computed_beta = tf.einsum('s,skj->kj',z_weights, hess_psi)
+    else:
+        computed_beta = tf.einsum('s,sk->k',z_weights, hess_psi)
+    
+    return relocalize(computed_e, computed_rho, computed_beta,
+                      new_mu,new_cov, G.diag_cov)
 
-    return relocalize(G,computed_e, computed_rho, computed_beta, new_mu)
+"""
+def test_(G,X,Y,new_mu,new_cov,new_cov_sqrt):
+    if tf.shape(X)[0] == 0 or tf.shape(Y)[0]==0:
+        return tf.zeros([]), tf.zeros([G.p]), tf.zeros([G.p,G.p])
 
+    #sample s realisations of Zᵢ~𝒩(0,1)
+    z, z_weights = generate_sampling_tf(G.s, G.p)
+    thetas = tf.expand_dims(new_mu,0)\
+                + tf.einsum('pk,sp->sk', new_cov_sqrt,z,
+                            name = 'einsum_in_activations')
+    psi = tf.map_fn(lambda t: G.Psi(X, Y, t), thetas,
+                        dtype=tf.float32)
+    return psi
+"""
 def proj_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
     if tf.shape(X)[0] == 0 or tf.shape(Y)[0]==0:
         return tf.zeros([]), tf.zeros([G.p]), tf.zeros([G.p,G.p])
@@ -105,14 +123,12 @@ def proj_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
 
     #compute projection arrays:
     # A_array[i] = Aᵢ               of size [p,k]
-    # A_array_kernel[i] = [A^T·A]ᵢ
-    #note that A_array_kernel may not be computed, depending on the options of G
-    A_array, A_array_kernel = aux_A_arrays(G,X)
+    A_array = G.Proj(X, G.k)
 
     #compute local parameters, in other terms describe how behaves Aᵢ·θ:
     # local_mu[i]=μᵢ
     # local_std[i]=√Σᵢ
-    local_mu, local_std, local_cov = aux_local_parameters(G, A_array, A_array_kernel,
+    local_mu, local_std, local_cov = aux_local_parameters(G, A_array,
                                                new_mu, new_cov, new_cov_sqrt)
     
     #sample s realisations of Zᵢ~𝒩(0,1)
@@ -149,9 +165,10 @@ def proj_likelihood_triplet(G,X,Y,new_mu,new_cov,new_cov_sqrt):
     computed_e = tf.reduce_sum(local_e, name="computed_e_l")
     computed_rho  = tf.einsum('npk,nk->p', A_array, local_r,
                               name = 'computed_rho_l')
-    computed_beta = aux_compute_beta(G, A_array_kernel, A_array, local_B)
+    computed_beta = aux_compute_beta(G, A_array, local_B)
     
-    return relocalize(G,computed_e, computed_rho, computed_beta, new_mu)
+    return relocalize(computed_e, computed_rho, computed_beta,
+                      new_mu, new_cov, G.diag_cov)
 
 def prior_triplet(G,new_mu,new_cov,new_cov_sqrt):
     """
@@ -183,7 +200,6 @@ def prior_triplet(G,new_mu,new_cov,new_cov_sqrt):
         Computed β for the prior given X,Y.
 
     """
-    
     l=G.p if not G.prior_iid else 1
     
     z, z_weights = generate_sampling_tf(G.s, l)
@@ -214,26 +230,54 @@ def prior_triplet(G,new_mu,new_cov,new_cov_sqrt):
             dtype=tf.float32)
     grad_pi = tf.map_fn(G.grad_Pi, thetas,
             dtype=tf.float32)
-    hess_pi = tf.map_fn(G.hess_Pi, thetas,
-            dtype=tf.float32)
+    
+    #independant coordinates
+    if not G.prior_iid:
+        hess_Pi = G.hess_Pi
+    else:
+        hess_Pi=lambda x : tf.linalg.diag_part(G.hess_Pi(x))    
+    hess_pi = tf.map_fn(hess_Pi, thetas, dtype=tf.float32)
+    
     # computed_e_l[i] = ∑ⱼ wⱼ·π(aⱼ) ≈ 𝔼[π(θ)] = e*_π             of size []
     # computed_rho_l[i] = ∑ⱼ wⱼ·∇π(Aᵢzⱼ) ≈ 𝔼[∇π(θ)] = ρ*_π       of size [p]
     # computed_beta_l[i] = ∑ⱼ wⱼ·Hπ(Aᵢzⱼ) ≈ 𝔼[Hπ(θ)] = β_π       of size [p,p]
     computed_e_l = tf.einsum('s,s->', z_weights, pi)
     computed_rho_l = tf.einsum('s,sk->k', z_weights, grad_pi)
-    computed_beta = tf.einsum('s,skj->kj', z_weights, hess_pi)
-    return relocalize(G,computed_e_l, computed_rho_l, computed_beta, new_mu)
+    if not G.prior_iid:
+        computed_beta_l = tf.einsum('s,skj->kj', z_weights, hess_pi)
+    else:
+        computed_beta_l = tf.einsum('s,sk->k', z_weights, hess_pi)
+        
+    return relocalize(computed_e_l, computed_rho_l, computed_beta_l,
+                      new_mu, new_cov, G.prior_iid)
 
-def relocalize(G, e_l, rho_l, beta, mu):
-    rho = rho_l - tf.einsum('i,ij->j',mu,beta)
-    e = e_l - tf.einsum('i,i->',rho_l,mu) \
-        + 0.5 * tf.einsum('i,ij,j->',mu, beta,mu)
-    
-    return e_l, rho_l, beta
 
 """
 AUXILLIARY FUNCTIONS
 """
+def relocalize(e_l, rho_l, beta_l, mu, cov, beta_diag=False):
+    #"""
+    if not beta_diag:
+        return e_l, rho_l, beta_l
+    else:
+        return e_l, rho_l, tf.diag(beta_l)
+    #"""
+    
+    if not beta_diag:
+        beta = beta_l
+        mu_beta = tf.einsum('i,ij->j',mu,beta_l)
+        mu_beta_mu = tf.einsum('i,ij,j->',mu, beta_l ,mu)
+    else:
+        beta = tf.diag(beta_l)
+        mu_beta = tf.einsum('i,i->i',mu,beta_l)
+        mu_beta_mu = tf.einsum('i,i->',mu_beta,mu)
+    
+    rho = rho_l - mu_beta
+    e = e_l - tf.einsum('i,i->',rho_l,mu) + 0.5 * mu_beta_mu
+    
+    #-0.5 * tf.diag(tf.linalg.diag_part(tf.einsum('ij,jk->ik',beta,cov)))
+    
+    return e, rho, beta
 
 def compute_phis(G, Activations, Y, local_mu, local_std, local_cov):
     """
@@ -281,6 +325,7 @@ def compute_phis(G, Activations, Y, local_mu, local_std, local_cov):
         Activations_flat = tf.reshape(Activations, [s*n,k])
         if approx_needed:
             w_flat = tf.reshape(w, [s*n,k])
+            cov_inv_flat = tf.tile(cov_inv,[s,1,1])
         #compute flatten activated functions
         #recall we have Activations of size [s×n]
         #compute:
@@ -297,7 +342,7 @@ def compute_phis(G, Activations, Y, local_mu, local_std, local_cov):
         if hess_Phi_ is not None:
             hess_phi_flat = hess_Phi_(Activations_flat)
         else:
-            hess_phi_flat = hess_approx(G, w_flat, phi_flat, grad_phi_flat)
+            hess_phi_flat = hess_approx(G, w_flat, cov_inv_flat,phi_flat, grad_phi_flat)
         
         #unflatten data
         phi = tf.reshape(phi_flat, [s,n])
@@ -321,7 +366,8 @@ def compute_phis(G, Activations, Y, local_mu, local_std, local_cov):
         if hess_Phi_ is not None:
             hess_phi = tf.map_fn(hess_Phi_, Activations, dtype=tf.float32)
         else:
-            hess_phi = tf.map_fn(lambda A : hess_approx(G, A[0], A[1],A[2]), [w,phi,grad_phi], dtype=tf.float32)
+            hess_phi = tf.map_fn(lambda A : hess_approx(G, A[0],cov_inv,A[1],A[2]),
+                                 [w,phi,grad_phi], dtype=tf.float32)
         
     return phi, grad_phi, hess_phi
 
@@ -339,7 +385,10 @@ def compute_psis(G, X, Y, thetas, mu, cov):
         
     #Hψ
     if G.hess_Psi is not None:
-        hp = lambda t: G.hess_Psi(X,Y,t)
+        if not G.diag_cov:
+            hp = lambda t: G.hess_Psi(X,Y,t)
+        else:
+            hp = lambda t: tf.linalg.diag_part(G.hess_Psi(X,Y,t))
         hess_psi = tf.map_fn(hp, thetas, dtype=tf.float32)
         #if both are computed
         if grad_psi is not None:
@@ -357,7 +406,7 @@ def compute_psis(G, X, Y, thetas, mu, cov):
     if grad_psi is None:
         grad_psi = grad_approx(G,w,psi)
     if hess_psi is None :
-        hess_psi = hess_approx(G,w,psi,grad_psi)
+        hess_psi = hess_approx(G,w,cov_inv,psi,grad_psi)
         
     return psi, grad_psi, hess_psi
     
@@ -366,23 +415,34 @@ def grad_approx(G,w,act):
     grad = tf.einsum('n,np->np',act,w)
     return grad
     
-def hess_approx(G,w,act,grad):
+def hess_approx(G,w,cov_inv,act,grad):
     if G.compute_hess in ["grad","tf"]:
         #using the gradient previously computed
         #Hƒ(θ)[i] = Sym(∇ƒ(θ)(θ-μᵢ)^T Σᵢ⁻¹)
         #         = Sym(∇ƒ(θ)•wᵢ^T)
-        outer = tf.einsum('np,nq->npq',grad,w)    
-        return Sym(outer)
+        if not G.diag_cov:
+            outer = tf.einsum('np,nq->npq',grad,w)    
+            return Sym(outer)
+        else:
+            outer = tf.einsum('np,np->np',grad,w)
+            return outer
     
     else : #G.compute_hess == "act":
         #using the activations of f previously computed
-        #Hƒ(θ)[i] = 0.5•ƒ(θ)(Σ⁻¹(θ-μᵢ)(θ-μᵢ)^T Σᵢ⁻¹ - I)
+        #Hƒ(θ)[i] = 0.5•ƒ(θ)(Σ⁻¹(θ-μᵢ)(θ-μᵢ)^T Σᵢ⁻¹ - Σᵢ⁻¹)
         #         = 0.5•ƒ(θ)(w[i]•w[i]^T - I)
-        outer = tf.einsum('np,nq->npq', w, w)
-        I = tf.expand_dims(tf.eye(G.k),0)
-        inside = 0.5 * (outer - I)
-        r = tf.einsum('i,ijk->ijk',act,inside)
-        return r
+        if not G.diag_cov:
+            outer = tf.einsum('np,nq->npq', w, w)
+            I = tf.expand_dims(tf.eye(G.k),0)
+            inside = 0.5 * (outer - cov_inv)
+            r = tf.einsum('i,ijk->ijk',act,inside)
+            return r
+        else:
+            outer = tf.einsum('np,np->np',w,w)
+            I = tf.expand_dims(tf.ones(G.k),0)
+            inside = 0.5 * (outer - I)
+            r = tf.einsum('i,ij->ij',act,inside)
+            return r
 
 def compute_hess(G, f, thetas, mu, cov, act, grad):
     """
@@ -421,9 +481,9 @@ def compute_hess(G, f, thetas, mu, cov, act, grad):
 """
 OTHER AUXILLIARY
 """
-
+"""
 def aux_A_arrays(G, X):
-    """
+    DEPRECATED
     Make the computation of the different projection matrices Aᵢ.
 
 
@@ -434,19 +494,24 @@ def aux_A_arrays(G, X):
     A_array_kernel : tf.tensor [n,p,k,p,k], optional
         The set of projection matrix kernels, where
         A_array_kernel[i,a,b,c,d] = Aᵢ[a,b] × Aᵢ[c,d]
-    """
+    
+    
     #A_array[i]=Aᵢ              of size [n,p,k]
-    A_array =  G.Proj(X, G.d, G.k)
+    A_array =  G.Proj(X, G.k)
 
     #compute optionally the kernel
     A_array_kernel = None
     if G.compute_kernel:
-        A_array_kernel = tf.einsum('npk,nqj->npkqj', A_array, A_array,
-                                    name = "As_kernel")
+        if not G.diag_cov:
+            A_array_kernel = tf.einsum('npk,nqj->npkqj', A_array, A_array,
+                                        name = "As_kernel")
+        else:
+            A_array_kernel = tf.einsum('npk,npj->npkj', A_array, A_array,
+                                       name = "As_kernel")
 
     return A_array, A_array_kernel
-
-def aux_local_parameters(G,A_array,A_array_kernel,new_mu,new_cov,new_cov_sqrt):
+"""
+def aux_local_parameters(G,A_array,new_mu,new_cov,new_cov_sqrt):
     """
     Make the computation of the different local parameters, μᵢ and σᵢ.
 
@@ -465,39 +530,36 @@ def aux_local_parameters(G,A_array,A_array_kernel,new_mu,new_cov,new_cov_sqrt):
     #compute local_std
     # local_std[i] = σᵢ = √Var[Aᵢ·θ]
     if not G.local_std_trick:
-        #using new_cov_sqrt, no use of A_array_kernel
+        #using new_cov_sqrt
         local_cov = None
         #compute:
         # local_std = σᵢ = √Σ·Aᵢ        of size [n,p,k]
         local_std = tf.einsum('pq,nqk->npk', new_cov_sqrt, A_array,
                                 name = 'einsum_std_trick')
     else:
-        # local_std[i] = √local_cov[i] = √(Aᵢ·Σ·(Aᵢ^T))
-        if G.compute_kernel:
-            local_cov = tf.einsum('npkql,pq->nkl', A_array_kernel, new_cov,
-                                 name = 'einsum_lazy_kernel_local_cov')
-        else:
-            local_cov = tf.einsum('npk,pq,nql->nkl', A_array, new_cov, A_array,
-                                 name = 'einsum_lazy_local_cov')
+        #local_cov = tf.einsum('npk,pq,nql->nkl', A_array, new_cov, A_array,
+        #                         name = 'einsum_lazy_local_cov')
+        local_cov_ = tf.einsum('npk,pq->nkq',A_array,new_cov)
+        local_cov = tf.einsum('nkq,nql->nkl', local_cov_, A_array)
         local_std_T = tf.linalg.cholesky(local_cov)
         local_std = tf.transpose(local_std_T, perm=[0, 2, 1])
 
     return local_mu, local_std, local_cov
 
-def aux_compute_beta(G, A_array_kernel, A_array, local_B):
+def aux_compute_beta(G, A_array, local_B):
     """
     Compute β from B in the case we are using projected parameters.
     """
     #compute β
     # computed_beta = β = ∑ᵢ (Aᵢ^T)·Bᵢ·Aᵢ = ∑ᵢ βᵢ       of size [p,p]
-    if G.compute_kernel:
-        computed_beta = tf.einsum('npkqj,nkj->pq',A_array_kernel, local_B,
-                                  name = 'einsum_likelihood_compute_kernel')
-    else:
-        computed_beta_ = tf.einsum('ijk,ikl->ijl', A_array, local_B,
-                                      name = 'computed_beta_aux')
+    computed_beta_ = tf.einsum('ijk,ikl->ijl', A_array, local_B,
+                                    name = 'computed_beta_aux')
+    if not G.diag_cov:
         computed_beta = tf.einsum('ijl,iml->jm',computed_beta_, A_array,
-                                 name = 'computed_beta')
+                                name = 'computed_beta')
+    else:
+        computed_beta = tf.einsum('ijl,ijl->j', computed_beta_, A_array,
+                                name = 'computed_beta')
     return computed_beta
 
 def compute_new_cov_and_co(G,gamma,cov, cov_max,
@@ -534,3 +596,15 @@ def compute_new_cov_and_co(G,gamma,cov, cov_max,
         new_logdet_ = tf.reduce_sum(tf.log(s_new_cov))
         
     return new_cov_, new_cov_sqrt_, new_logdet_
+
+def sym(M):
+    """
+    Apply the "Sym" operation to a square matrix, the purpose being to make it symmetric.
+    M ↦ M + M^T - diag(M)
+    """
+    return 0.5 * (M + tf.transpose(M)) - tf.diag(tf.linalg.diag_part(M))
+def Sym(Ms):
+    """
+    Apply the "Sym" operation to a set of square matrices.
+    """
+    return tf.map_fn(sym, Ms,  dtype=tf.float32)

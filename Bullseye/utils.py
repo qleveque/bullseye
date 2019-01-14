@@ -19,26 +19,22 @@ except ImportError:
 def partition_list(l, n):
     for i in range(0, len(l), n):
         yield l[i:i+n]
-        
 
-def softmax_probabilities(z):
-    """
-    return the softmax probabilities of z
-
-    Keyword arguments:
-        z -- np.array() or list() containing the different initial scores
-    """
-    #for numerical stability
-    z = z - np.max(z)
-    #unnormalized probabilities
-    P = np.exp(z)
-    return P/np.sum(P)
+"""
+MULTILOGIT
+"""
     
 def mu_to_theta_multilogit(mu,k):
     d = int(mu.shape[0]/k)
     theta_hat = np.ndarray.reshape(mu, (k,d)).T
     #theta_hat = np.ndarray.reshape(mu,(d,k))
     return theta_hat
+    
+def test_multilogit(theta,X):
+    S = X@theta
+    P = [softmax_probabilities(s) for s in S]
+    R = [np.argmax(p) for p in P]
+    return R
     
 def evaluate_multilogit_results(theta_0, mu):
     d, k = theta_0.shape
@@ -55,6 +51,7 @@ def evaluate_multilogit_results(theta_0, mu):
     print(e)
     print("norm of the error")
     print(np.linalg.norm(e))
+    
     
 def generate_multilogit(d,n,k, file = None):
     """
@@ -81,6 +78,17 @@ def generate_multilogit(d,n,k, file = None):
 
     return theta_0, x_array, y_array.astype(np.float32)
 
+def softmax_probabilities(z):
+    #for numerical stability
+    z = z - np.max(z)
+    #unnormalized probabilities
+    P = np.exp(z)
+    return P/np.sum(P)
+
+"""
+LINEAR MODELS
+"""
+
 def generate_lm(d,n):
     theta_0 = np.random.uniform(low=1.0, high=2.0,size = [d])
     
@@ -96,6 +104,10 @@ def generate_lm(d,n):
     y_array = x_array@theta_0 + e
     
     return theta_0, x_array, y_array
+
+"""
+CNN
+"""
 
 def cartesian_coord(*arrays):
     """
@@ -129,18 +141,6 @@ def matrix_sqrt(A):
     #r = tf.matmul(u, tf.matmul(s_sqrt, v, adjoint_b=True))
     r = tf.transpose(tf.linalg.cholesky(A))
     return r
-
-def sym(M):
-    """
-    Apply the "Sym" operation to a square matrix, the purpose being to make it symmetric.
-    M ↦ M + M^T - diag(M)
-    """
-    return M + tf.transpose(M) - tf.diag(tf.linalg.diag_part(M))
-def Sym(Ms):
-    """
-    Apply the "Sym" operation to a set of square matrices.
-    """
-    return tf.map_fn(sym, Ms,  dtype=tf.float32)
 
 """
 Color handling

@@ -13,6 +13,7 @@ csv_filename = os.path.join(cwd,"data","streaming_file.csv")
 result_filename = os.path.join(cwd,"data","streaming_file.data")
 
 def streaming_file(recompute = False):
+    ms = [5000,1000]
     if recompute:
         k=5
         d=10
@@ -22,15 +23,14 @@ def streaming_file(recompute = False):
         
         df = pd.DataFrame(columns=["method","time","status"])
         
-        n_iter = 5
-        n_loops = 10
-        ms = [5000,1000]
+        n_iter = 3
+        n_loops = 3
         methods = ["pandas", "tf"]
         
         for m in ms:
             for method in methods:
                 bull = Bullseye.Graph()
-                bull.feed_with(file=csv_filename, k = k, m=5000)
+                bull.feed_with(file=csv_filename, k = k, m=m)
                 bull.set_predefined_model("multilogit")
                 bull.set_predefined_prior("normal_iid")
                 bull.init_with(mu_0 = 0, cov_0 = 1)
@@ -56,6 +56,6 @@ def streaming_file(recompute = False):
         handle_fig("streaming_file_0")
         sns.set()
         sns.boxplot(x="method", y="time",data=df.loc[df["m"]==ms[1]])
-        handle_fig("streaming_file_0")
+        handle_fig("streaming_file_1")
     else:
         raise FileNotFoundError

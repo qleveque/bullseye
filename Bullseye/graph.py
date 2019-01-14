@@ -63,7 +63,6 @@ def construct_bullseye_graph(G):
             
             #not that nice...
             if not G.to_one_hot:
-                #→ to change, not that nice
                 X = tf.transpose(tf.convert_to_tensor(it_next[k:(d+k)]))
                 Y = tf.transpose(tf.convert_to_tensor(it_next[:k]))
             else:
@@ -84,6 +83,9 @@ def construct_bullseye_graph(G):
                             dtype = tf.string)
 
     #μ, Σ and ELBO related
+    if G.diag_cov:
+        G.cov_0 = np.einsum('ij,ij->ij',G.cov_0,np.eye(*list(G.cov_0.shape)))
+    
     mu = tf.get_variable("mu",[p],initializer = tic(G.mu_0),
                         dtype = tf.float32)
     cov  = tf.get_variable("cov",[p,p],initializer = tic(G.cov_0),
@@ -167,10 +169,7 @@ def construct_bullseye_graph(G):
     """
     UPDATE
     """
-    if not G.diag_cov:
-        update_new_cov = tf.assign(new_cov, new_cov_)
-    else:
-        update_new_cov = tf.assign(new_cov, tf.diag(tf.linalg.diag_part(new_cov_)))
+    update_new_cov = tf.assign(new_cov, new_cov_)
     update_new_mu = tf.assign(new_mu, new_mu_)
     update_new_logdet = tf.assign(new_logdet, new_logdet_)
 
@@ -192,7 +191,8 @@ def construct_bullseye_graph(G):
     
     computed_e, computed_rho, computed_beta = \
         likelihood_triplet(G,X,Y,*ltargs)
-
+    
+    #test = test_(G,X,Y,*ltargs)
 
     #PRIO TRIPLET
     ptargs = [new_mu,new_cov,new_cov_sqrt]
@@ -211,12 +211,6 @@ def construct_bullseye_graph(G):
         if G.file is not None and G.tf_dataset:
             #if we use tf.dataset, we need to reset the iterator to 0
             init_partials += [iterator]
-        if G.file is None:
-            init_partials += [x_index]
-        
-        if G.file is None:
-            x_index_update = tf.assign(x_index,x_index + 1)
-            update_partials += [x_index_update]
         
         #consider sum
         if G.chunk_as_sum:
@@ -227,14 +221,17 @@ def construct_bullseye_graph(G):
                                     initializer = tf.zeros_initializer,
                                     dtype = tf.float32)
             beta_sum = tf.get_variable("beta_sum",[p,p],
-                                    initializer = tic(np.linalg.inv(G.cov_0)),
+                                    initializer = tf.zeros_initializer,
                                     dtype = tf.float32)
 
-            #chunk as sum, will increase step by step global_e, global_rho and
-            #global_beta with update_globals
+            #chunk as sum, will increase step by step e_sum, rho_sum and
+            #beta_sum with update_partials
             update_partial_e=tf.assign(e_sum,e_sum+computed_e)
             update_partial_rho=tf.assign(rho_sum,rho_sum+computed_rho)
             update_partial_beta=tf.assign(beta_sum,beta_sum+computed_beta)
+            
+            #we need to reset the sum to 0 at each iteration
+            init_partials += [e_sum, rho_sum, beta_sum]
 
         #conside vectors
         # then we need to keep in mind all the different eᵢ,ρᵢ,βᵢ
@@ -257,22 +254,19 @@ def construct_bullseye_graph(G):
                                         initializer = tf.zeros_initializer,
                                         dtype = tf.float32))
                 beta_tab.append(tf.get_variable("beta_"+idx, [p,p],
-                                        initializer=tic(np.linalg.inv(G.cov_0)),
+                                        initializer=tf.zeros_initializer,
                                         dtype = tf.float32))
 
                 update_partial_e.append(tf.assign(e_tab[_],computed_e))
                 update_partial_rho.append(tf.assign(rho_tab[_],commuted_rho))
                 update_partial_beta.append(tf.assign(beta_tab[_],computed_beta))
-            
-            #we need to reset the sum to 0 at each iteration
-            init_partials += [e_tab, rho_tab, beta_tab]
 
         update_partials+=[update_partial_e, update_partial_rho, update_partial_beta]
         init_chunks = tf.variables_initializer(init_partials)
     
     #if we do not consider batches
     else:
-        init_chunks, update_partials = 2*[tf.no_op()]
+        init_chunks, update_partials, init_partials = 3*[tf.no_op()]
 
 
     """
@@ -288,8 +282,8 @@ def construct_bullseye_graph(G):
     else:
         if G.chunk_as_sum:
             new_e = e_sum + computed_e_prior
-            new_rho = e_sum + computed_rho_prior
-            new_beta = e_sum + computed_beta_prior
+            new_rho = rho_sum + computed_rho_prior
+            new_beta = beta_sum + computed_beta_prior
         else: #chunk as list
             new_e = tf.reduce_sum(e_tab, axis = 0) + computed_e_prior
             new_rho = tf.reduce_sum(rho_tab, axis = 0) + computed_rho_prior
@@ -332,7 +326,7 @@ def construct_bullseye_graph(G):
     """
     condition_update = new_ELBO > ELBO
 
-    brutal_iteration = accepted_update
+    brutal_iteration = accepted_update()
     soft_iteration = tf.cond(condition_update, accepted_update, refused_update)
 
     if G.brutal_iteration:
@@ -357,6 +351,8 @@ def construct_bullseye_graph(G):
                 
                 'new_logdet' : new_logdet,
                 'new_e': new_e,
+                'new_rho' : new_rho,
+                'new_beta': new_beta,
 
                 'update_partials' : update_partials,
                 'init_chunks' : init_chunks,
@@ -377,7 +373,9 @@ def construct_bullseye_graph(G):
                 'iteration' : iteration,
                 'status' : status,
 
-                'update_new_parameters' : update_new_parameters
+                'update_new_parameters' : update_new_parameters,
+                'init_partials' : init_partials
+                #'test' : test
                 }
 
     return graph, ops_dict

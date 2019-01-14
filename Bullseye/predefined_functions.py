@@ -46,9 +46,11 @@ def compute_p_LM(d,k):
 compute_ps["LM"] = compute_p_LM
 
 def compute_p_CNN(d, k, conv_sizes, pools):
-    n_for_conv = sum([conv_size**2 + 1 for conv_size in conv_sizes])
+    tab_conv = [conv_size**2 + 1 for conv_size in conv_sizes]
+    n_for_conv = sum(tab_conv)
+    
     c = int(math.sqrt(d))
-    flatten_size = int(c/np.prod(pools))**2
+    flatten_size = math.floor(c/np.prod(pools))**2
     n_for_multilogit = flatten_size * k + k
     return n_for_conv + n_for_multilogit
 compute_ps["CNN"] = compute_p_CNN
@@ -166,10 +168,12 @@ predefined_Psis["LM_without_hess"] = [Psi_LM, grad_Psi_LM, None]
 predefined_Psis["LM_without_grad"]=[Psi_LM, grad_Psi_LM, hess_Psi_LM]
 predefined_Psis["LM"]=[Psi_LM, grad_Psi_LM, hess_Psi_LM]
 
+
 def Psi_CNN(X,Y,theta,conv_sizes,pools):
     k = Y.shape.as_list()[1]
     P = Probabilities_CNN(X,k,theta,conv_sizes,pools)
     return -tf.reduce_sum(tf.log(tf.einsum('nk,nk->n',Y,P)),0)
+
 predefined_Psis["CNN"] = [Psi_CNN, None, None]
 
 #===============================================================================
@@ -234,6 +238,7 @@ def hess_Pi_normal_iid(theta, mu = 0, sigma = 1):
     l = - 1/tf.square(sigma)
     p = tf.shape(theta)[0]
     I = tf.eye(p)
+    #return -l*tf.ones([p])
     return -l*I
 
 predefined_Pis["normal_iid"] = [Pi_normal_iid, grad_Pi_normal_iid,
@@ -296,6 +301,7 @@ def hess_Phi_LM(A,Y):
 
 predefined_Phis["LM"] = [Phi_LM, grad_Phi_LM, hess_Phi_LM]
 predefined_Phis["LM_without_hess"] = [Phi_LM, grad_Phi_LM, None]
+predefined_Phis["LM_without_grad"] = [Phi_LM, None, hess_Phi_LM]
 predefined_Phis["LM_simple"] = [Phi_LM, None, None]
 
 """
@@ -419,3 +425,36 @@ predefined_Projs["multilogit_mapfn"] = Proj_multilogit_mapfn
 def Proj_LM(X,k):
     return tf.expand_dims(X,2)
 predefined_Projs["LM"] = Proj_LM
+
+
+#===============================================================================
+
+predefined_Predicts = {}
+Predict_docstring = """
+Projection functions
+====================
+
+Refers to Predict_*
+
+The operations used within these functions must be tensorflow
+operations.
+
+Parameters
+----------
+X : tf.tensor [n,d]
+    The design matrix.
+mu : tf.tensor [p]
+    The parameter matrix.
+
+Returns
+-------
+tf.tensor [n]:
+    Y_hat
+"""
+
+def Predict_CNN(X,theta,k,conv_sizes = None, pools = None):
+    P = Probabilities_CNN(X,k,theta,conv_sizes,pools)
+    return tf.math.argmax(P,axis=1)
+    #return P
+    
+predefined_Predicts["CNN"] = Predict_CNN

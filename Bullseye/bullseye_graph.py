@@ -18,7 +18,9 @@ import math
 from .graph import construct_bullseye_graph
 from .predefined_functions import compute_ps,\
     predefined_Phis, predefined_Psis,\
-    predefined_Projs, predefined_Pis
+    predefined_Projs, predefined_Pis,\
+    predefined_Predicts
+from tensorflow.initializers import constant as tic
 from .profilers import RunSaver
 from .utils import *
 from .warning_handler import *
@@ -62,7 +64,7 @@ class Graph:
     >>> bull.feed_with(file = "dataset.csv", chunksize = 50, k=10)
     >>> bull.set_predefined_model("multilogit")
     >>> bull.init_with(mu_0 = 0, cov_0 = 1)
-    >>> bull.set_options(m = 0, compute_kernel = True)
+    >>> bull.set_options()
     >>> bull.build()
     >>> bull.run()
     """
@@ -105,7 +107,7 @@ class Graph:
                 # did not increase enough
                 "step_size"   : 0.5,
                 #number of sample to approximate expectations
-                "s"                         : 100,
+                "s"                         : 50,
                 #we have s observations of the activations. make flatten
                 # activations to True in order to flatten the observations
                 # into a large unique observation.
@@ -113,15 +115,12 @@ class Graph:
                 #when computing the local variances, compute the square roots
                 # one by one
                 "local_std_trick"           : True,
-                #when computing ABA^T, compute the kernels H=AA^T for fast
-                # computations of ABA^T, but exponential space is required
-                "compute_kernel"            : False, #todo
                 #when streaming a file, if chunk_as_sum is true, does not
                 # keep track of the different values of eᵢ,ρᵢ,βᵢ in order
                 # to save space
-                "chunk_as_sum"              : True, #todo
+                "chunk_as_sum"              : True,
                 #when streaming through a file, use tensorflow dataset class
-                "tf_dataset"                : False, #todo
+                "tf_dataset"                : False,
                 #include timeliner in saved informations
                 "timeliner"                 : False,
                 #include tf profiler in saved informations,
@@ -293,6 +292,8 @@ class Graph:
             Assert whether we should use projections to simplify θ locally or
             not.
         """
+        assert self.feed_with_is_called
+        
         #keep that in mind
         self.use_projs = use_projections
 
@@ -388,6 +389,8 @@ class Graph:
         The operations used within these functions must be tensorflow
         operations.
         """
+        assert self.feed_with_is_called
+        
         #set p
         self.p = p
 
@@ -548,13 +551,10 @@ class Graph:
 
         #inform the user when some of these options are not compatible
         #→
-        """if self.keep_1d_prior:
-            #→
-            if "compute_prior_kernel" in list(kwargs):
-                warn_useless_parameter("computed_prior_kernel", "keep_1d_prior",
-                                    function = "Bullseye_graph.set_options()")
-            self.compute_prior_kernel = False
-        """
+        if self.diag_cov:
+            if self.prior_iid == False:
+                #say to the user
+                self.prior_iid = True
 
     def build(self):
         """
@@ -648,9 +648,9 @@ class Graph:
                                     **run_kwargs)
 
                 if self.file is not None:
-                    #read chunks, and update global e, rho and beta
+                    #read chunks, and update partial es, rhos and betas
                     # in consequence
-                    self.set_partials_from_chunks(sess, run_kwargs=run_kwargs)
+                    self.__set_partials_from_chunks(sess, run_kwargs=run_kwargs)
                 #debug array-----
                 if debug_array is not None:
                     ans = self.__run(sess,[ops[op] for op in debug_array],
@@ -664,7 +664,6 @@ class Graph:
                     self.__run(sess, ops["iteration"],
                                         feed_dict = d_computed, **run_kwargs)
                 statu = statu.decode('utf-8')
-
                 #---->finish epoch
                 self.saver.finish_epoch(statu, elbo, best_elbo)
                 if self.saver.keep_track:
@@ -691,6 +690,33 @@ class Graph:
         r.update(self.saver.final_stats())
         return r
 
+    def predict(self, X_test, mu, k, model = None, Predict = None,
+                  **specific_parameters):
+        """
+        →
+        """
+        
+        if Predict is None:
+            assert model is not None
+            Predict_ = predefined_Predicts[model]
+            Predict = lambda X,mu : Predict_(X,mu,k,**specific_parameters)
+        
+        graph_test = tf.Graph()
+        with graph_test.as_default() as g:
+            mu = tf.get_variable("mu",mu.shape,
+                    initializer = tic(mu),
+                    dtype = tf.float32)
+            X_test = tf.get_variable("X_test",X_test.shape,
+                    initializer = tic(X_test),
+                    dtype = tf.float32)
+            init = tf.global_variables_initializer()
+            
+        with tf.Session(graph=graph_test) as sess:
+            sess.run(init)
+            T = sess.run(Predict(X_test,mu))
+        return T
+            
+
     def __run(self, sess, ops_to_compute, feed_dict={}, **run_kwargs):
         """
         This private method can be seen as an overload of the tensorflow.Session
@@ -716,14 +742,12 @@ class Graph:
 
         if self.saver is not None:
             self.saver.before_run()
-            
         d = sess.run(ops_to_compute,feed_dict = feed_dict, **run_kwargs)
-        
         if self.saver is not None:
             self.saver.after_run(run_kwargs)
         return d
 
-    def set_partials_from_chunks(self, sess, run_kwargs):
+    def __set_partials_from_chunks(self, sess, run_kwargs):
         """
         Compute global_e, global_rho and global_beta while streaming through the
         file.
@@ -740,7 +764,7 @@ class Graph:
         ops = self.in_graph
         #initialize global e, rho and beta
         self.__run(sess,ops["init_chunks"],**run_kwargs)
-
+        
         #create a pandas reader to stream the file
         if not self.tf_dataset:
             reader = pd.read_table(self.file,
@@ -763,19 +787,18 @@ class Graph:
                 else:
                     X = data[:,self.k:self.d+self.k]
                     Y = data[:,:self.k]
-
+                
                 #create the feeding dict
                 d_ = {"X:0" : X, "Y:0" : Y}
-
                 #update the global parameters
-                self.run_partials_update(sess, i, run_kwargs=run_kwargs, dict=d_)
+                self.__run_partials_update(sess, i, run_kwargs=run_kwargs, dict=d_)
 
         #else, create a tf.dataset reader to stream the file
         else:
             for i in range(self.M):
-                self.run_partials_update(sess, i, run_kwargs=run_kwargs)
+                self.__run_partials_update(sess, i, run_kwargs=run_kwargs)
 
-    def run_partials_update(self, sess, i, run_kwargs, dict={}):
+    def __run_partials_update(self, sess, i, run_kwargs, dict={}):
         """
         Update global_e, global_rho and global_beta with a given chunk.
 
@@ -803,4 +826,4 @@ class Graph:
             self.__run(sess,ops["update_partials"][i], feed_dict = dict,
                     **run_kwargs)
 
-        print("Chunk number {} done.".format(i))        
+        print("Chunk number {} done.".format(i))

@@ -8,6 +8,7 @@ def simple_test():
     bull = Bullseye.Graph()
     bull.feed_with(x_array,y_array)
     bull.set_predefined_model("multilogit")
+    bull.set_predefined_prior("normal_iid")
     bull.init_with(mu_0 = 0, cov_0 = 1)
     bull.build()
     bull.run(run_id = "simple multilogit")

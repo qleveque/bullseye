@@ -35,7 +35,7 @@ def warn_unknown_parameter(param, function):
     msg = """
     Unknown parameter in function {function}.
     Specifically {param}"""
-    warn(msg.format(param=param,function=param))
+    warn(msg.format(param=param,function=function))
 
 def warn_useless_parameter(param1,param2,function):
     """

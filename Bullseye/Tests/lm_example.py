@@ -21,12 +21,12 @@ def lm_example():
     #create Bullseye.Graph object
     bull = Bullseye.Graph()
     bull.feed_with(X=X, Y=Y)
-    bull.set_predefined_model(model = "LM")
-    bull.set_predefined_prior(prior = "normal_iid")
+    bull.set_predefined_model("LM")
+    bull.set_predefined_prior("normal_iid")
     bull.init_with(mu_0 = np.array([1,1]), cov_0 = 1)
+    bull.set_options(compute_hess="grad",compute_grad="act",s=500)
     bull.build()
     
-    #run graph
     d = bull.run(n_iter = 2, run_id="lm_example")
     mu = d["mu"]
     

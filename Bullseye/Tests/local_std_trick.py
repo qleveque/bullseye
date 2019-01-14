@@ -58,13 +58,11 @@ def local_std_trick(recompute = False):
         df = pd.read_csv(result_filename)
         
         sns.set()
-        sns.boxplot(x="method", y="time",data=df.loc[df['test'] == 'win'])
-        plt.title('Study of the interest of the local_std_trick')
+        sns.boxplot(x="method", y="time",data=df.loc[df["test"] == "win"])
         handle_fig("local_std_trick_win")
         
         sns.set()
-        sns.boxplot(x="method", y="time",data=df.loc[df['test'] != 'win'])
-        plt.title('Study of the interest of the local_std_trick')
+        sns.boxplot(x="method", y="time",data=df.loc[df["test"] == "not_win"])
         handle_fig("local_std_trick_loses")
     else:
         raise FileNotFoundError

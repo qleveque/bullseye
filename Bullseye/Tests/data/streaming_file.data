@@ -1,201 +1,37 @@
-,method,times,status
-0,np_data,1.6536002159118652,accepted
-1,np_data,1.0139997005462646,accepted
-2,np_data,0.9983999729156494,accepted
-3,np_data,1.0140001773834229,accepted
-4,np_data,1.0139999389648438,accepted
-5,np_data,0.49919986724853516,not accepted
-6,np_data,0.5148003101348877,not accepted
-7,np_data,0.4835999011993408,not accepted
-8,np_data,0.5148000717163086,not accepted
-9,np_data,0.49919986724853516,not accepted
-0,np_data,1.5911998748779297,accepted
-1,np_data,0.9983999729156494,accepted
-2,np_data,0.9828000068664551,accepted
-3,np_data,0.9983999729156494,accepted
-4,np_data,0.9828000068664551,accepted
-5,np_data,0.5304000377655029,not accepted
-6,np_data,0.49920010566711426,not accepted
-7,np_data,0.49919986724853516,not accepted
-8,np_data,0.49920010566711426,not accepted
-9,np_data,0.49919986724853516,not accepted
-0,np_data,1.5922000408172607,accepted
-1,np_data,1.029599905014038,accepted
-2,np_data,0.49920010566711426,not accepted
-3,np_data,0.49919986724853516,not accepted
-4,np_data,0.49920010566711426,not accepted
-5,np_data,0.4836001396179199,not accepted
-6,np_data,0.4835999011993408,not accepted
-7,np_data,0.49919986724853516,not accepted
-8,np_data,0.49920010566711426,not accepted
-9,np_data,0.4836001396179199,not accepted
-0,np_data,1.5756001472473145,accepted
-1,np_data,1.0139997005462646,accepted
-2,np_data,0.49920010566711426,not accepted
-3,np_data,0.4836001396179199,not accepted
-4,np_data,0.49919986724853516,not accepted
-5,np_data,0.4835999011993408,not accepted
-6,np_data,0.4836001396179199,not accepted
-7,np_data,0.49920010566711426,not accepted
-8,np_data,0.49919986724853516,not accepted
-9,np_data,0.9828000068664551,accepted
-0,np_data,1.5911998748779297,accepted
-1,np_data,0.9983999729156494,accepted
-2,np_data,0.5148000717163086,not accepted
-3,np_data,0.49919986724853516,not accepted
-4,np_data,0.5304000377655029,not accepted
-5,np_data,0.4836001396179199,not accepted
-6,np_data,0.5147998332977295,not accepted
-7,np_data,0.49920010566711426,not accepted
-8,np_data,0.49919986724853516,not accepted
-9,np_data,0.4836001396179199,not accepted
-0,np_data,1.5756001472473145,accepted
-1,np_data,0.9672000408172607,accepted
-2,np_data,0.5147998332977295,not accepted
-3,np_data,0.5148000717163086,not accepted
-4,np_data,0.5147998332977295,not accepted
-5,np_data,0.5148003101348877,not accepted
-6,np_data,0.49919986724853516,not accepted
-7,np_data,0.5147998332977295,not accepted
-8,np_data,0.4836001396179199,not accepted
-9,np_data,0.49920010566711426,not accepted
-0,np_data,1.5912001132965088,accepted
-1,np_data,1.0139997005462646,accepted
-2,np_data,0.49920010566711426,not accepted
-3,np_data,0.4836001396179199,not accepted
-4,np_data,0.49919986724853516,not accepted
-5,np_data,0.5148003101348877,not accepted
-6,np_data,0.4835999011993408,not accepted
-7,np_data,0.5303997993469238,not accepted
-8,np_data,0.5460002422332764,not accepted
-9,np_data,0.49919986724853516,not accepted
-0,np_data,1.5911998748779297,accepted
-1,np_data,0.9983999729156494,accepted
-2,np_data,0.49920010566711426,not accepted
-3,np_data,0.4835999011993408,not accepted
-4,np_data,0.49919986724853516,not accepted
-5,np_data,0.49920010566711426,not accepted
-6,np_data,0.49919986724853516,not accepted
-7,np_data,0.5148003101348877,not accepted
-8,np_data,0.5147998332977295,not accepted
-9,np_data,0.4836001396179199,not accepted
-0,np_data,1.559999942779541,accepted
-1,np_data,0.9983999729156494,accepted
-2,np_data,0.5460002422332764,not accepted
-3,np_data,0.49919986724853516,not accepted
-4,np_data,0.5147998332977295,not accepted
-5,np_data,0.4836001396179199,not accepted
-6,np_data,0.5002000331878662,not accepted
-7,np_data,0.4836001396179199,not accepted
-8,np_data,0.4835999011993408,not accepted
-9,np_data,0.5148000717163086,not accepted
-0,np_data,1.606799840927124,accepted
-1,np_data,1.0140001773834229,accepted
-2,np_data,0.49920010566711426,not accepted
-3,np_data,0.49919986724853516,not accepted
-4,np_data,0.49920010566711426,not accepted
-5,np_data,0.49919986724853516,not accepted
-6,np_data,0.4835999011993408,not accepted
-7,np_data,0.49920010566711426,not accepted
-8,np_data,0.5148000717163086,not accepted
-9,np_data,0.49920010566711426,not accepted
-0,streaming,1.0920000076293945,accepted
-1,streaming,0.7644000053405762,accepted
-2,streaming,0.7176001071929932,accepted
-3,streaming,0.7487998008728027,not accepted
-4,streaming,0.7332000732421875,not accepted
-5,streaming,0.7332000732421875,not accepted
-6,streaming,0.7331998348236084,not accepted
-7,streaming,0.7332000732421875,not accepted
-8,streaming,0.7342002391815186,accepted
-9,streaming,0.7175998687744141,not accepted
-0,streaming,1.107600212097168,accepted
-1,streaming,0.7643997669219971,accepted
-2,streaming,0.7176001071929932,accepted
-3,streaming,0.7332000732421875,accepted
-4,streaming,0.7331998348236084,accepted
-5,streaming,0.7332003116607666,accepted
-6,streaming,0.7331998348236084,not accepted
-7,streaming,0.7332000732421875,not accepted
-8,streaming,0.7331998348236084,not accepted
-9,streaming,0.7332000732421875,not accepted
-0,streaming,1.076399803161621,accepted
-1,streaming,0.7644000053405762,accepted
-2,streaming,0.7332000732421875,accepted
-3,streaming,0.7332000732421875,not accepted
-4,streaming,0.7488000392913818,not accepted
-5,streaming,0.7331998348236084,accepted
-6,streaming,0.7332000732421875,accepted
-7,streaming,0.7176001071929932,not accepted
-8,streaming,0.7331998348236084,not accepted
-9,streaming,0.7332000732421875,not accepted
-0,streaming,1.1387999057769775,accepted
-1,streaming,0.7176003456115723,accepted
-2,streaming,0.717599630355835,accepted
-3,streaming,0.7488000392913818,not accepted
-4,streaming,0.7332000732421875,not accepted
-5,streaming,0.7332003116607666,accepted
-6,streaming,0.717599630355835,not accepted
-7,streaming,0.7488000392913818,not accepted
-8,streaming,0.7332000732421875,not accepted
-9,streaming,0.7176001071929932,not accepted
-0,streaming,1.0920000076293945,accepted
-1,streaming,0.7488000392913818,accepted
-2,streaming,0.7331998348236084,accepted
-3,streaming,0.7488000392913818,accepted
-4,streaming,0.7332000732421875,not accepted
-5,streaming,0.7332000732421875,not accepted
-6,streaming,0.7175998687744141,not accepted
-7,streaming,0.7332000732421875,not accepted
-8,streaming,0.7175998687744141,not accepted
-9,streaming,0.7644002437591553,accepted
-0,streaming,1.1388001441955566,accepted
-1,streaming,0.7332000732421875,accepted
-2,streaming,0.7331998348236084,accepted
-3,streaming,0.7332003116607666,not accepted
-4,streaming,0.7331998348236084,not accepted
-5,streaming,0.7332000732421875,not accepted
-6,streaming,0.7331998348236084,accepted
-7,streaming,0.7332000732421875,accepted
-8,streaming,0.7332000732421875,not accepted
-9,streaming,0.7175998687744141,not accepted
-0,streaming,1.076399803161621,accepted
-1,streaming,0.7332003116607666,accepted
-2,streaming,0.7331998348236084,accepted
-3,streaming,0.7332000732421875,accepted
-4,streaming,0.7331998348236084,not accepted
-5,streaming,0.7332000732421875,accepted
-6,streaming,0.7332000732421875,not accepted
-7,streaming,0.7332000732421875,not accepted
-8,streaming,0.7331998348236084,not accepted
-9,streaming,0.7332000732421875,not accepted
-0,streaming,1.154400110244751,accepted
-1,streaming,0.7488000392913818,accepted
-2,streaming,0.7488000392913818,not accepted
-3,streaming,0.7175998687744141,not accepted
-4,streaming,0.7332000732421875,not accepted
-5,streaming,0.7488000392913818,not accepted
-6,streaming,0.7331998348236084,not accepted
-7,streaming,0.7332003116607666,not accepted
-8,streaming,0.7331998348236084,not accepted
-9,streaming,0.7332000732421875,accepted
-0,streaming,1.1075999736785889,accepted
-1,streaming,0.7799999713897705,accepted
-2,streaming,0.7488000392913818,not accepted
-3,streaming,0.7175998687744141,not accepted
-4,streaming,0.7332003116607666,not accepted
-5,streaming,0.7488000392913818,not accepted
-6,streaming,0.7175998687744141,not accepted
-7,streaming,0.7644000053405762,accepted
-8,streaming,0.7487998008728027,accepted
-9,streaming,0.7332003116607666,not accepted
-0,streaming,1.1075999736785889,accepted
-1,streaming,0.7488000392913818,accepted
-2,streaming,0.7331998348236084,accepted
-3,streaming,0.7488000392913818,not accepted
-4,streaming,0.7488000392913818,not accepted
-5,streaming,0.7332000732421875,not accepted
-6,streaming,0.7332000732421875,not accepted
-7,streaming,0.7332000732421875,not accepted
-8,streaming,0.7331998348236084,not accepted
-9,streaming,0.7488000392913818,not accepted
+,method,time,status,m
+0,pandas,32.87266492843628,refused,5000.0
+1,pandas,35.12123250961304,refused,5000.0
+2,pandas,35.70848298072815,refused,5000.0
+0,pandas,37.505778312683105,refused,5000.0
+1,pandas,38.20159411430359,refused,5000.0
+2,pandas,36.084128856658936,refused,5000.0
+0,pandas,39.19297647476196,refused,5000.0
+1,pandas,37.5644850730896,refused,5000.0
+2,pandas,37.938852310180664,refused,5000.0
+0,tf,38.35837411880493,refused,5000.0
+1,tf,39.123985290527344,refused,5000.0
+2,tf,39.151023149490356,refused,5000.0
+0,tf,39.294885873794556,refused,5000.0
+1,tf,38.334747314453125,refused,5000.0
+2,tf,39.29434609413147,refused,5000.0
+0,tf,39.57333064079285,refused,5000.0
+1,tf,38.643200397491455,refused,5000.0
+2,tf,40.33410954475403,refused,5000.0
+0,pandas,38.64431142807007,refused,1000.0
+1,pandas,39.2068989276886,refused,1000.0
+2,pandas,39.53915524482727,refused,1000.0
+0,pandas,42.0651159286499,refused,1000.0
+1,pandas,40.74093151092529,refused,1000.0
+2,pandas,37.7826886177063,refused,1000.0
+0,pandas,37.539172410964966,refused,1000.0
+1,pandas,34.8328423500061,refused,1000.0
+2,pandas,34.86194610595703,refused,1000.0
+0,tf,35.01216506958008,refused,1000.0
+1,tf,34.900866985321045,refused,1000.0
+2,tf,36.63373351097107,refused,1000.0
+0,tf,35.22860097885132,refused,1000.0
+1,tf,35.00936985015869,refused,1000.0
+2,tf,34.900790214538574,refused,1000.0
+0,tf,34.99528455734253,refused,1000.0
+1,tf,38.01222610473633,refused,1000.0
+2,tf,38.67332339286804,refused,1000.0
