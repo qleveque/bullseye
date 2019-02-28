@@ -11,7 +11,7 @@ from .utils import *
 cwd = os.path.dirname(os.path.realpath(__file__))
 result_filename = os.path.join(cwd,"data","flatten_activations.data")
 
-def flatten_activations(recompute = False):
+def flatten_activations(recompute = True):
     ss = [50, 500]
     if recompute:
         df = pd.DataFrame(columns=["method","time","s","status"])

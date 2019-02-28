@@ -1,13 +1,13 @@
 """
-→→→
+###
 The ``predefined_functions`` module
 ===================================
 
 Contains all functions related to the computation of the
-log-posterior ψ(θ) = ∑φᵢ(θ) = ∑ϕᵢ(Aᵢθ).
-In particular, contains the definition of predefined ψ's,
-ϕᵢ's, their gradients, hessians, and optionally their
-projection matrices Aᵢ for different models.
+log-posterior \psi(\theta) = \sum\phi_i(\theta) = \sum\varphi_i(A_i\theta).
+In particular, contains the definition of predefined \psi's,
+\varphi_i's, their gradients, hessians, and optionally their
+projection matrices A_i for different models.
 
 The public function that may be used are
 ``get_predefined_phis``, ``get_predefined_projs`` and
@@ -62,7 +62,7 @@ Psi functions
 =============
 
 Refers to Psi_*(), grad_Psi_*() and hess_Psi_*().
-The definitions of ψ, ∇ψ, Hψ when considering the log posterior as ψ(θ)
+The definitions of \psi, \nabla\psi, H\psi when considering the log posterior as \psi(\theta)
 The operations used within these functions must be tensorflow operations.
 
 Parameters
@@ -72,23 +72,23 @@ X : tf.tensor [n,d]
 Y : tf.tensor [n,k]
     Response matrix.
 theta : tf.tensor [p]
-    θ
+    \theta
 
 Returns
 -------
     []:
-        ψ(θ)
+        \psi(\theta)
 or
     [p]:
-        ∇ψ(θ)
+        \nabla\psi(\theta)
 or
     [p,p]:
-        Hψ(θ)
+        H\psi(\theta)
 """
 
 def Psi_multilogit(X,Y,theta):
     """
-    ψ(X,Y,θ) = - log[ ∑ᵢ (∑ⱼ Yⱼexp(θⱼ·xᵢ))/(∑ⱼ exp(θⱼ·xᵢ)) ]
+    \psi(X,Y,\theta) = - log[ \sum_i (\sum_j Y_jexp(\theta_j\cdotx_i))/(\sum_j exp(\theta_j\cdotx_i)) ]
     """
     k = Y.shape.as_list()[1]
     d = X.shape.as_list()[1]
@@ -135,7 +135,7 @@ predefined_Psis["multilogit_simple"] = [Psi_multilogit, None,None]
 
 def Psi_LM(X,Y,theta):
     """
-    ψ(X,Y,Θ) = ψ(X,Y,β) = 0.5·n·log(2π) + 0.5 • ∑ᵢ(Yᵢ-Xᵢβ)²
+    \psi(X,Y,Θ) = \psi(X,Y,\beta) = 0.5\cdotn\cdotlog(2\pi) + 0.5 \cdot \sum_i(Y_i-X_i\beta)^2
     """
     #size of the sample
     n = tf.cast(tf.shape(X)[0],tf.float32)
@@ -147,7 +147,7 @@ def Psi_LM(X,Y,theta):
 
 def grad_Psi_LM(X,Y,theta):
     """
-    ∂ψ(X,Y,β)/∂βⱼ = Xⱼ•(Y-X•β)^T
+    \del\psi(X,Y,\beta)/\del\beta_j = X_j\cdot(Y-X\cdot\beta)^T
     """
     #e
     e = tf.squeeze(Y,1) - tf.einsum('ij,j->i',X,theta)
@@ -157,7 +157,7 @@ def grad_Psi_LM(X,Y,theta):
 
 def hess_Psi_LM(X,Y,theta):
     """
-    ∂ψ(X,Y,β)/∂βⱼ∂βₙ = -Xⱼ•Xₙ
+    \del\psi(X,Y,\beta)/\del\beta_j\del\beta_n = -X_j\cdotX_n
     """
     #compute the hess log likelihood
     hess_log_likelihood = -tf.einsum('ji,jk->ik',X,X)
@@ -185,7 +185,7 @@ Pi functions
 
 Refers to Pi_*(), grad_Pi_*() and hess_Pi_*().
 
-Prior part of the contribution into the ψ function.
+Prior part of the contribution into the \psi function.
 
 The operations used within these functions must be tensorflow
 operations.
@@ -198,13 +198,13 @@ Theta : tf.tensor [n,k]
 Returns
 -------
     []:
-        π(A)
+        \pi(A)
 or
     [p]:
-        ∇π(A)
+        \nabla\pi(A)
 or
     [p,p]:
-        Hπ(A)
+        H\pi(A)
 """
 
 """
@@ -255,7 +255,7 @@ Refers to Phi_*(), grad_Phi_*() and hess_Phi_*().
 
 Matrix form of the functions phi_*(), grad_phi_*() ans
 hess_phi_*(). In particular :
-    Phi_*(A) = {phi_*(aᵢ) for aᵢ ∈ A}.
+    Phi_*(A) = {phi_*(a_i) for a_i \in A}.
 
 The operations used within these functions must be tensorflow
 operations.
@@ -270,24 +270,24 @@ Y : tf.tensor [n,k]
 Returns
 -------
     [n]:
-        ϕ(A)
+        \varphi(A)
 or
     [n,k]:
-        ∇ϕ(A)
+        \nabla\varphi(A)
 or
     [n,k,k]:
-        Hϕ(A)
+        H\varphi(A)
 """
 """
 LM
 """
 def Phi_LM(A,Y):
     """
-    ψ(X,Y,Θ) = ψ(X,Y,β) = ∑ᵢ 0.5·(log(2π) + (Yᵢ-Xᵢβ)²)
+    \psi(X,Y,Θ) = \psi(X,Y,\beta) = \sum_i 0.5\cdot(log(2\pi) + (Y_i-X_i\beta)^2)
     """
     #e
     e = tf.square(tf.squeeze(Y,1) - tf.squeeze(A,1))
-    #φ(Xᵢ,β) = 0.5·(log(2π) + (Yᵢ-Xᵢβ)²)
+    #\phi(X_i,\beta) = 0.5\cdot(log(2\pi) + (Y_i-X_i\beta)^2)
     phi = 0.5 * (tf.log(2*math.pi) * tf.ones_like(e) + e)
     return phi
 
@@ -390,7 +390,7 @@ Projection functions
 Refers to Proj_*
 
 The matrix form of the projections proj_*()
-Corresponds to (proj_*(xᵢ) : i∈〚1,n〛).
+Corresponds to (proj_*(x_i) : i\in[1,n]).
 
 The operations used within these functions must be tensorflow
 operations.
@@ -403,11 +403,11 @@ X : tf.tensor [n,d]
 Returns
 -------
 tf.tensor [n, d, k]:
-    {Aᵢ : i∈〚1,n〛}
+    {A_i : i\in[1,n]}
 """
 
 def Proj_multilogit(X,k):
-    #→
+    ##
     d = X.shape.as_list()[1]
     X_tiled = tf.tile(X, [1,k])
     kron = np.kron(np.eye(k),np.ones((d,1)))

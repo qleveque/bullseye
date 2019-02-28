@@ -7,6 +7,7 @@ from .utils import *
 
 from .simple_test import simple_test
 from .lm_example import lm_example
+from .lm_user_example import lm_user_example
 from .multilogit_example import multilogit_example
 
 from .gradients_hessians import gradients_hessians

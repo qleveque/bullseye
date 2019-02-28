@@ -11,7 +11,7 @@ from .utils import *
 cwd = os.path.dirname(os.path.realpath(__file__))
 result_filename = os.path.join(cwd,"data","local_std_trick.data")
 
-def local_std_trick(recompute = False):
+def local_std_trick(recompute = True):
     if recompute:
         df = pd.DataFrame(columns=["method","time","status","test"])
         

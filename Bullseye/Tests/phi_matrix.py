@@ -15,7 +15,7 @@ from Bullseye.predefined_functions import predefined_Phis
 cwd = os.path.dirname(os.path.realpath(__file__))
 result_filename = os.path.join(cwd,"data","phi_matrix.data")
 
-def phi_matrix(recompute = False):
+def phi_matrix(recompute = True):
     df = pd.DataFrame(columns=["option","time","n"])
     if recompute:
         #initialize variables

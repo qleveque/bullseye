@@ -55,10 +55,10 @@ def evaluate_multilogit_results(theta_0, mu):
     
 def generate_multilogit(d,n,k, file = None):
     """
-    →
+    #
     """
     p=d*k
-    #create θ₀ matrix (with k class in d dimensions)
+    #create \theta₀ matrix (with k class in d dimensions)
     theta_0 = np.random.randn(d,k)/(k*d)**0.5
     #random design matrix
     x_array = np.random.randn(n,d)
@@ -102,7 +102,6 @@ def generate_lm(d,n):
     e = np.random.normal(scale = 0.2,size = [n])
     #y_array
     y_array = x_array@theta_0 + e
-    
     return theta_0, x_array, y_array
 
 """

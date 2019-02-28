@@ -25,7 +25,7 @@ def multilogit_example():
     bull.feed_with(X=X, Y=Y)
     bull.set_predefined_model(model = "multilogit")
     bull.set_predefined_prior(prior = "normal_iid", sigma = 10)
-    bull.init_with(mu_0 = np.array([1]*p), cov_0 = 1)
+    bull.init_with(mu_0 = np.array([0]*p), cov_0 = 1)
     bull.build()
     
     #run graph

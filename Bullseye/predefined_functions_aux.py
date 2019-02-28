@@ -1,5 +1,5 @@
 """
-→
+#
 """
 
 import numpy as np
@@ -36,7 +36,7 @@ def Probabilities_CNN(X,k,theta,conv_sizes,pools):
         how_to_split_theta += [conv_sizes[i]**2, 1]
 
     #for final logistic regression,
-    # with flatten_size×k parameters and k interecepts
+    # with flatten_size\timesk parameters and k interecepts
     how_to_split_theta += [flatten_size*k, k]
 
     #finally split theta
@@ -86,7 +86,7 @@ def apply_max_pool(X, pool_size):
         #[batch, height, width, channels]
         inputs = X,
         pool_size = pool_size,
-        strides = pool_size, #→
+        strides = pool_size, ##
         padding='valid'
         )
     return X_pooled
@@ -111,8 +111,8 @@ def Softmax_probabilities(A):
     """
     #note : removing max per row (M) for numerical stability
     #compute :
-    # sp_[i,j]=exp[Aᵢⱼ]
-    # sp[i,j]=exp[Aᵢⱼ]/(∑ₙ exp[Aᵢₙ])
+    # sp_[i,j]=exp[A_i_j]
+    # sp[i,j]=exp[A_i_j]/(\sum_n exp[A_i_n])
 
     sp_ = tf.exp(A - tf.expand_dims(tf.reduce_max(A, reduction_indices=[1]),1))
     sp = sp_/tf.expand_dims(tf.reduce_sum(sp_, reduction_indices=[1]),1)
@@ -134,8 +134,8 @@ def softmax_probabilities(a):
     """
     #note : removing max for numerical stability
     #compute :
-    # sp_[i]=exp[Aᵢ]
-    # sp[i]=exp[Aᵢ]/(∑ₙ exp[Aₙ])
+    # sp_[i]=exp[A_i]
+    # sp[i]=exp[A_i]/(\sum_n exp[A_n])
     sp_ = tf.exp(a - tf.ones_like(a) *\
                      tf.reduce_max(a, reduction_indices=[0]))
     sp = sp_/tf.reduce_sum(sp_, reduction_indices=[0]) #[n,k]
@@ -148,8 +148,8 @@ phi functions
 
 Refers to phi_*(), grad_phi_*() and hess_phi_*().
 
-The definitions of respectively ϕᵢ, ∇ϕᵢ, Hϕᵢ when expliciting
-the log posterior as ψ(θ) = ∑φᵢ(θ) = ∑ϕ(Aᵢθ).
+The definitions of respectively \varphi_i, \nabla\varphi_i, H\varphi_i when expliciting
+the log posterior as \psi(\theta) = \sum\phi_i(\theta) = \sum\varphi(A_i\theta).
 
 The operations used within these functions must be tensorflow
 operations.
@@ -164,13 +164,13 @@ y : tf.tensor [k]
 Returns
 -------
     []:
-        ϕ(a)
+        \varphi(a)
 or
     [k]:
-        ∇ϕ(a)
+        \nabla\varphi(a)
 or
     [k,k]:
-        Hϕ(a)
+        H\varphi(a)
 """
 
 """
@@ -212,8 +212,8 @@ projection functions
 
 Refers to proj_*()
 
-When expliciting the log posterior as ψ(θ) = ∑φᵢ(θ) = ∑ϕ(Aᵢθ),
-returns Aᵢ for observation xᵢ.
+When expliciting the log posterior as \psi(\theta) = \sum\phi_i(\theta) = \sum\varphi(A_i\theta),
+returns A_i for observation x_i.
 
 The operations used within these functions must be tensorflow
 operations.
@@ -226,7 +226,7 @@ x : tf.tensor [d]
 Returns
 -------
 tf.tensor [d, k]:
-    Aᵢ corresponding to input xᵢ
+    A_i corresponding to input x_i
 """
 def proj_multilogit(x, d, k):
     x_tiled = tf.tile(x,[k])

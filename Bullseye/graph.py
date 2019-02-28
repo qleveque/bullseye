@@ -5,7 +5,7 @@
     Contains the ``construct_bullseye_graph`` function which creates the
     implicit tensorflow graph.
 """
-#→ may try to document this better
+## may try to document this better
 
 import tensorflow as tf
 from tensorflow.initializers import constant as tic
@@ -82,7 +82,7 @@ def construct_bullseye_graph(G):
     status = tf.get_variable("status",[], initializer = tf.zeros_initializer,
                             dtype = tf.string)
 
-    #μ, Σ and ELBO related
+    #\mu, \Sigma and ELBO related
     if G.diag_cov:
         G.cov_0 = np.einsum('ij,ij->ij',G.cov_0,np.eye(*list(G.cov_0.shape)))
     
@@ -94,7 +94,7 @@ def construct_bullseye_graph(G):
     ELBO = tf.get_variable("elbo",[],initializer = tic(-np.infty),
                         dtype = tf.float32)
 
-    #e, ρ and β related
+    #e, ρ and \beta related
     e = tf.get_variable("e",[],initializer = tf.zeros_initializer,
                         dtype = tf.float32)
     rho = tf.get_variable("rho",[p], initializer = tf.zeros_initializer,
@@ -143,7 +143,7 @@ def construct_bullseye_graph(G):
         beta_inv = tf.matmul(u_beta, tf.matmul(s_beta_inv, v_beta, adjoint_b=True))
         beta_inv_sqrt = tf.matmul(u_beta, tf.matmul(s_beta_inv_sqrt, v_beta, adjoint_b=True))
 
-    #from definition of Σₘ
+    #from definition of \Sigmaₘ
     cov_max = beta_inv
     cov_max_inv = beta
     cov_max_sqrt = beta_inv_sqrt
@@ -154,7 +154,7 @@ def construct_bullseye_graph(G):
         gamma = step_size
     else:
         #compute
-        #K⁻¹=Σ^½•β•Σ^½
+        #K^{-1}=\Sigma^^{1/2}\cdot\beta\cdot\Sigma^^{1/2}
         K_inv = new_cov_sqrt @ beta @ new_cov_sqrt
         K_inv_sqrt = tf.linalg.cholesky(K_inv)
         K_eig = tf.math.reciprocal(tf.linalg.diag_part(K_inv))
@@ -234,7 +234,7 @@ def construct_bullseye_graph(G):
             init_partials += [e_sum, rho_sum, beta_sum]
 
         #conside vectors
-        # then we need to keep in mind all the different eᵢ,ρᵢ,βᵢ
+        # then we need to keep in mind all the different e_i,ρ_i,\beta_i
         else:
             e_tab = []
             rho_tab = []
@@ -303,9 +303,12 @@ def construct_bullseye_graph(G):
         update_cov  = tf.assign(cov, new_cov, name = "update_cov")
         update_mu = tf.assign(mu, new_mu, name = "update_mu")
         update_ELBO = tf.assign(ELBO, new_ELBO, name = "update_ELBO")
-        update_step_size=tf.assign(step_size, G.speed, name="update_step_size")
+        if G.init_step_size:
+            update_step_size=tf.assign(step_size, G.speed, name="update_step_size")
+        else:
+            update_step_size=tf.no_op()
 
-        #→
+        ##
         with tf.control_dependencies([update_e, update_rho, update_beta,
                                      update_cov, update_mu, update_ELBO,
                                      update_step_size]):

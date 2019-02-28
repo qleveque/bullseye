@@ -55,13 +55,14 @@ class Graph:
 
     Attributes
     ----------
-    #→
+    ##
 
     Example
     -------
     >>> import Bullseye
     >>> bull = Bullseye.Graph()
     >>> bull.feed_with(file = "dataset.csv", chunksize = 50, k=10)
+    >>> bull.set_predefined_prior("normal_iid")
     >>> bull.set_predefined_model("multilogit")
     >>> bull.init_with(mu_0 = 0, cov_0 = 1)
     >>> bull.set_options()
@@ -84,11 +85,11 @@ class Graph:
             "file","m","M","to_one_hot",
             #init related
             "mu_0","cov_0",
-            #φ's, ψ's and projections related
+            #\phi's, \psi's and projections related
             "Psi","grad_Psi","hess_Psi",
             "Phi","grad_Phi","hess_Phi","Proj",
             "use_projs",
-            #π's related
+            #\pi's related
             "Pi","grad_Pi","hess_Pi",
             "prior_iid",
             #saver related
@@ -96,7 +97,7 @@ class Graph:
             ]
 
         #listing of all option attributes and their default values
-        #→ think about putting these options in the __init__ parameters
+        ## think about putting these options in the __init__ parameters
         options = {
                 #if brutal iteration, the ELBO will be updated even if it
                 # decreases
@@ -116,7 +117,7 @@ class Graph:
                 # one by one
                 "local_std_trick"           : True,
                 #when streaming a file, if chunk_as_sum is true, does not
-                # keep track of the different values of eᵢ,ρᵢ,βᵢ in order
+                # keep track of the different values of e_i,ρ_i,\beta_i in order
                 # to save space
                 "chunk_as_sum"              : True,
                 #when streaming through a file, use tensorflow dataset class
@@ -138,7 +139,9 @@ class Graph:
                 #autohess
                 "compute_hess"              : "tf",
                 #diag_cov
-                "diag_cov"                  : False
+                "diag_cov"                  : False,
+                #init step_size
+                "init_step_size"            : False
                 }
 
         #keep in mind the name of those options
@@ -171,7 +174,7 @@ class Graph:
         Method 3: requires file, chunksize and k
             To stream a file.
 
-        →
+        #
 
         Parameters
         ----------
@@ -185,9 +188,9 @@ class Graph:
             k
         file : string
             Path of the file to stream (.csv format).
-        chunksize : int
+        m : int
             Chunksize
-        number_of_chunk_max : int
+        M : int
             Number of chunk to consider per iterations.
         """
         
@@ -233,7 +236,7 @@ class Graph:
             self.file = file
 
             #deduce d
-            #→ not a perfect method to assert d
+            ## not a perfect method to assert d
             reader = pd.read_table(file, sep=",", chunksize = 1)
             for chunk in reader:
                 data = list(chunk.shape)
@@ -244,7 +247,7 @@ class Graph:
                 self.d = data[-1]-k
 
             #deduce n
-            #→ not a perfect method to assert n
+            ## not a perfect method to assert n
             n = sum(1 for line in open(file))
 
             if m is not None:
@@ -267,10 +270,10 @@ class Graph:
         use_projections = False,
         **specific_parameters):
         """
-        →specific_parameters
+        #specific_parameters
         Make use of the ``predefined_functions`` module.
         Specify to the graph a given model. There are multiple ways of doing so.
-        →
+        #
         Method 1: use_projections is set to True or not specified
             Then the implicit computations will be using Psi, and you can
             specify ``psi_option``.
@@ -289,7 +292,7 @@ class Graph:
         psi_option : str, optional
             psi_option, e.g. "std", see ``predefined_functions`` module.
         use_projections : bool, optional
-            Assert whether we should use projections to simplify θ locally or
+            Assert whether we should use projections to simplify \theta locally or
             not.
         """
         assert self.feed_with_is_called
@@ -377,13 +380,13 @@ class Graph:
         There are multiple ways of doing so.
 
         Method 1: requires Psi and p
-            Manually choose the function ψ. You can also specify ∇ψ and Hψ,
-            if not, ∇ψ and Hψ will be automatically computed using tf methods.
+            Manually choose the function \psi. You can also specify \nabla\psi and H\psi,
+            if not, \nabla\psi and H\psi will be automatically computed using tf methods.
             The given functions take as parameters an a design matrix X, a
-            response matrix Y, and the parameter θ.
+            response matrix Y, and the parameter \theta.
         Method 2: requires Phi, Proj and p
-            Manually choose the function φ. You can also specify ∇φ and Hφ,
-            if not, ∇φ and Hφ will be automatically computed using tf methods.
+            Manually choose the function \phi. You can also specify \nabla\phi and H\phi,
+            if not, \nabla\phi and H\phi will be automatically computed using tf methods.
             The given functions take as parameters an activation matrix and Y.
 
         The operations used within these functions must be tensorflow
@@ -398,14 +401,14 @@ class Graph:
         if Psi is not None:
             self.use_projs = False
             assert Psi is not None
-            #ψ
+            #\psi
             self.Psi = Psi
-            #∇ψ
+            #\nabla\psi
             self.grad_Psi = grad_Psi
             if grad_Psi is None and self.compute_grad=="tf":
                 self.grad_Psi = lambda X,Y,theta : \
                     tf.gradients(self.Psi(X,Y,theta),theta)[0]
-            #Hψ
+            #H\psi
             self.hess_Psi = hess_Psi
             if hess_Psi is None and self.compute_hess=="tf":
                 #self.hess_Psi = lambda A:tf.gradients(grad_Psi(A[0],A[1],A[2]),A[2])[0]
@@ -416,13 +419,13 @@ class Graph:
             self.use_projs = True
             assert Phi is not None
             assert Proj is not None
-            #ϕ
+            #\varphi
             self.Phi = Phi
-            #∇ϕ
+            #\nabla\varphi
             self.grad_Phi = grad_Phi
             if grad_Phi is None and self.compute_grad=="tf":
                 self.grad_Phi = lambda A, Y:tf.gradients(self.Phi(A,Y),A)[0]
-            #Hϕ
+            #H\varphi
             #impossible to use tf hessians
             self.hess_Phi = hess_Phi
 
@@ -430,7 +433,7 @@ class Graph:
             self.Proj = Proj
 
         #handle std_prior
-        #depending on the form of the given std_prior, transform it into a p×p
+        #depending on the form of the given std_prior, transform it into a p\timesp
         #matrix.
         """
         if type(prior_std) == int:
@@ -448,9 +451,9 @@ class Graph:
 
     def set_predefined_prior(self, prior, **specific_parameters):
         """
-        →
+        #
         """
-        #get the π's
+        #get the \pi's
         Pi_, grad_Pi_, hess_Pi_, iid = \
             predefined_Pis[prior]
 
@@ -474,15 +477,15 @@ class Graph:
 
     def set_prior(self,Pi, grad_Pi = None, hess_Pi = None, iid = False):
         """
-        →
+        #
         """
-        #π
+        #\pi
         self.Pi = Pi
-        #∇π
+        #\nabla\pi
         self.grad_Pi = grad_Pi
         if grad_Pi is None and self.compute_grad=="tf":
             self.grad_Pi = lambda theta:tf.gradients(Pi(theta),theta)[0]
-        #Hπ
+        #H\pi
         self.hess_Pi = hess_Pi
         if hess_Pi is None and self.compute_grad=="tf":
             self.hess_Pi = lambda theta:tf.hessians(Pi(theta),theta)[0]
@@ -496,22 +499,22 @@ class Graph:
 
     def init_with(self, mu_0 = 0, cov_0 = 1):
         """
-        Specify μ₀ and Σ₀ from which the Bullseye algorithm should start.
+        Specify \mu₀ and \Sigma₀ from which the Bullseye algorithm should start.
 
         Parameters
         ----------
         mu_0 : float, or np.array [p], optional
-            μ₀
+            \mu₀
         cov_0 : float, np.array [p] or [p,p], optional
-            Σ₀
+            \Sigma₀
         """
-        #handle μ₀
+        #handle \mu₀
         if type(mu_0) in [float, int]:
             self.mu_0 = mu_0 * np.ones(self.p)
         elif len(mu_0.shape) == 1:
             assert list(mu_0.shape) == [self.p]
             self.mu_0 = mu_0
-        #handle Σ₀
+        #handle \Sigma₀
         if type(cov_0) in [float, int]:
             self.cov_0 = cov_0 * np.eye(self.p)
         elif len(cov_0.shape) == 1:
@@ -533,7 +536,7 @@ class Graph:
         ----------
         **kwargs :
             The different options to be specified.
-            →
+            #
         """
 
         #test if all the given options are allowed
@@ -550,7 +553,7 @@ class Graph:
                 assert self.local_std_trick
 
         #inform the user when some of these options are not compatible
-        #→
+        ##
         if self.diag_cov:
             if self.prior_iid == False:
                 #say to the user
@@ -577,7 +580,7 @@ class Graph:
     def run(self, n_iter = 10, run_id = None, X = None, Y = None,
         debug_array = None):
         """
-        →debug
+        #debug
         Run the implicit tensorflow graph.
 
         Parameters
@@ -595,7 +598,7 @@ class Graph:
         Returns
         ------
         dict
-            μ, Σ, ELBO and statistics in a dictionnary
+            \mu, \Sigma, ELBO and statistics in a dictionnary
         """
 
         #to prevent errors, ensures the graph is already built
@@ -693,7 +696,7 @@ class Graph:
     def predict(self, X_test, mu, k, model = None, Predict = None,
                   **specific_parameters):
         """
-        →
+        #
         """
         
         if Predict is None:
@@ -816,12 +819,12 @@ class Graph:
         #for simplicity
         ops = self.in_graph
 
-        #add to e,ρ and β the current eᵢ,ρᵢ and βᵢ
+        #add to e,ρ and \beta the current e_i,ρ_i and \beta_i
         if self.chunk_as_sum:
             self.__run(sess,ops["update_partials"], feed_dict = dict,
                     **run_kwargs)
 
-        #chunk as list : append current eᵢ, ρᵢ and βᵢ to [eᵢ],[ρᵢ],[βᵢ]
+        #chunk as list : append current e_i, ρ_i and \beta_i to [e_i],[ρ_i],[\beta_i]
         else:
             self.__run(sess,ops["update_partials"][i], feed_dict = dict,
                     **run_kwargs)

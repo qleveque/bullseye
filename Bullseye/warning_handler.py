@@ -9,24 +9,15 @@ import warnings
 
 from .utils import *
 
-"""
-HANDY FUNCTIONS
-"""
 
+"""
+`WARNING FUNCTIONS
+"""
 def warn(msg, warning_code=None):
     """
     Handy function to raise warnings.
     """
     warnings.warn(bcolors.WARNING+msg+bcolors.ENDC, warning_code)
-def err(msg):
-    """
-    Handy function to raise errors.
-    """
-    raise Exception(bcolors.FAIL+msg+bcolors.ENDC)
-
-"""
-WARNING FUNCTIONS
-"""
 
 def warn_unknown_parameter(param, function):
     """
@@ -63,6 +54,11 @@ def warn_removing_dir(dirname):
 """
 ERROR FUNCTIONS
 """
+def err(msg):
+    """
+    Handy function to raise errors.
+    """
+    raise Exception(bcolors.FAIL+msg+bcolors.ENDC)
 
 def err_bad_name(name):
     """

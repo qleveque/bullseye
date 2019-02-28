@@ -19,7 +19,7 @@ class Option:
         self.focus = focus
         self.opt = opt
 
-def gradients_hessians(recompute = False):
+def gradients_hessians(recompute = True):
     if recompute:
         
         n_iter = 10

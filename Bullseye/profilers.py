@@ -45,9 +45,9 @@ def read_results(run_id):
     Returns
     -------
     mu : np.array [p]
-        μ
+        \mu
     cov : np.array [p,p]
-        Σ
+        \Sigma
     elbo : np.array []
         final ELBO
     """
@@ -71,9 +71,9 @@ def trace_results(run_id):
     Returns
     -------
     mu : list of np.arrays [p]
-        μ's
+        \mu's
     cov : list of np.arrays [p,p]
-        Σ's
+        \Sigma's
     elbo : np.array []
         ELBO's
     """
@@ -110,7 +110,7 @@ def all_epoch_dirs(run_id):
     run_dir = os.path.join(data_dir, run_id)
     dirs = [os.path.join(run_dir,dir) for dir in os.listdir(run_dir)
             if re.match("^"+epoch_keyword,dir)]
-    return dirs
+    return sorted(dirs)
 
 class RunSaver():
     """
@@ -368,7 +368,7 @@ class Profiler:
                                                 trace_steps=[],
                                                 dump_steps=[])
 
-        #→ using __enter__ is not a good practice
+        ## using __enter__ is not a good practice
         self.pctx.__enter__()
     def prepare_next_step(self):
         """

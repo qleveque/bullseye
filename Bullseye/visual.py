@@ -1,3 +1,10 @@
+"""
+The ``visual`` module
+=====================
+
+Contains multiple functions for visual purposes.
+"""
+
 from .utils import *
 width = 79 - 20
 

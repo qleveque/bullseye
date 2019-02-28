@@ -12,7 +12,7 @@ cwd = os.path.dirname(os.path.realpath(__file__))
 csv_filename = os.path.join(cwd,"data","streaming_file.csv")
 result_filename = os.path.join(cwd,"data","streaming_file.data")
 
-def streaming_file(recompute = False):
+def streaming_file(recompute = True):
     ms = [5000,1000]
     if recompute:
         k=5
